@@ -26,6 +26,9 @@ env/
 *.parquet
 
 # Project-specific large datasets and pretrained models
+0-Data_transformation/.Database/
+0-Data_transformation/.output/
+0-Data_transformation/User_input/
 4-MDLM/data/GloVe_data/
 4-MDLM/data/MDLM_Models/
 5-MGM/data/silva132/

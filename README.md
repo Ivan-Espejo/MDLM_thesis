@@ -4,6 +4,7 @@ This repository contains the code and workflow used for the MDLM thesis project,
 
 ## Repository structure
 
+- 0-Data_transformation/: code for harmonizing individual cohort datasets into a single OTU table and label file for downstream pipeline input.
 - 01-*.py and 01-master_*.sh: initial data-splitting and orchestration scripts.
 - 1-mikropml/, 2-DeepMicro/, 4-MDLM/, and 5-MGM/: method-specific pipelines and scripts.
 - 4-MDLM/microbiome_transformers/: transformer-based training code and utilities.
@@ -14,6 +15,9 @@ This repository intentionally does not include large data files, pretrained mode
 
 The following paths are excluded from version control:
 
+- 0-Data_transformation/.Database/
+- 0-Data_transformation/.output/
+- 0-Data_transformation/User_input/
 - 4-MDLM/data/GloVe_data/
 - 4-MDLM/data/MDLM_Models/
 - 5-MGM/data/silva132/
