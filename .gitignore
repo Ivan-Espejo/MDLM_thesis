@@ -1,0 +1,31 @@
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+
+# Jupyter and editor artifacts
+.ipynb_checkpoints/
+.vscode/
+.DS_Store
+
+# Large data/model artifacts
+*.zip
+*.fasta
+*.npy
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.pkl
+*.model
+*.onnx
+*.parquet
+
+# Project-specific large datasets and pretrained models
+4-MDLM/data/GloVe_data/
+4-MDLM/data/MDLM_Models/
+5-MGM/data/silva132/
