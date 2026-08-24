@@ -5,15 +5,16 @@ Script: 02-benchmarking.py
 Description:
     A universal benchmarking script designed to evaluate and compare multiple 
     machine learning models (MGM, MDLM, mikropml, DeepMicro, and Alpha) from a single 
-    standardized input directory using the true empirical thresholds and binary 
-    decisions (y_pred) utilized by the models, including the Matthews Correlation 
-    Coefficient (MCC) and Balanced Accuracy.
+    standardized input directory. It dynamically scans nested subdirectories
+    to extract 'Predictions_*.csv' files, standardizing them to compute 
+    empirical metrics, MCC, and Balanced Accuracy.
 =============================================================================
 """
 
 import os
 import glob
 import argparse
+import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -49,98 +50,137 @@ def calculate_actual_metrics(y_true, y_prob, y_pred):
 def load_standardized_data(input_dir, labels_path):
     """Crawls the input directory and standardizes all model predictions including y_pred."""
     master_data = {}
-    print(f"Scanning directory: {input_dir}")
+    print(f"Scanning nested directories inside: {input_dir}")
     
-    # 1. Mikropml, DeepMicro & Alpha (Format: SampleID, Actual, Predicted, Healthy, IBD)
-    for framework in ['alpha', 'mikropml', 'deepmicro']:
-        search_path = os.path.join(input_dir, framework, 'Predictions_*.csv')
-        for file_path in glob.glob(search_path):
-            model_name = os.path.basename(file_path).replace('Predictions_', '').replace('.csv', '').upper()
-            
-            # ---------------------------------------------------------
-            # OFFICIAL NOMENCLATURE FORMATTING
-            # ---------------------------------------------------------
-            if framework == 'mikropml':
-                fw_display = 'mikropml'
-            elif framework == 'deepmicro':
-                fw_display = 'DeepMicro'
-            else:
-                fw_display = 'Alpha Diversity Baseline'
-                
-            full_name = f"{fw_display} ({model_name})"
-            # ---------------------------------------------------------
+    # Use recursive glob to find all Prediction CSVs nested in subdirectories
+    search_path = os.path.join(input_dir, '**', '*redictions_*.csv')
+    prediction_files = glob.glob(search_path, recursive=True)
+    
+    # Add MGM manually since its filename is usually different (e.g. y_score.csv or Predictions_MGM.csv)
+    mgm_search_path = os.path.join(input_dir, '**', 'Predictions_MGM.csv')
+    mgm_files = glob.glob(mgm_search_path, recursive=True)
+    if not mgm_files: # Fallback in case it was saved as y_score.csv
+        mgm_search_path = os.path.join(input_dir, '**', 'y_score.csv')
+        mgm_files = glob.glob(mgm_search_path, recursive=True)
+        
+    all_files = list(set(prediction_files + mgm_files))
 
-            try:
-                df = pd.read_csv(file_path)
-                
+    if len(all_files) == 0:
+        print(f"[WARNING] No prediction CSVs found matching pattern: {search_path}")
+        return master_data
+
+    # Iterate through dynamically found files
+    for file_path in all_files:
+        filename = os.path.basename(file_path)
+        model_name_raw = filename.replace('Predictions_', '').replace('.csv', '')
+        
+        # Determine Base Framework from the folder path structure
+        path_components = os.path.normpath(file_path).split(os.sep)
+        
+        if 'mgm' in path_components or model_name_raw.upper() == 'MGM' or filename == 'y_score.csv':
+            # =========================================================
+            # CUSTOM MGM PARSER
+            # =========================================================
+            if os.path.exists(labels_path):
+                try:
+                    scores_df = pd.read_csv(file_path, index_col=0)
+                    scores_df.columns = scores_df.columns.astype(str)
+                    labels_df = pd.read_csv(labels_path)
+                    
+                    merged_df = labels_df.merge(scores_df, left_on=labels_df.columns[0], right_index=True, how='inner')
+                    
+                    logits = merged_df[['0', '1']].values
+                    logits_stable = logits - np.max(logits, axis=1, keepdims=True)
+                    probs = np.exp(logits_stable) / np.sum(np.exp(logits_stable), axis=1, keepdims=True)
+                    
+                    y_true = merged_df['Label'].values
+                    y_prob = probs[:, 1]
+                    y_pred = np.argmax(probs, axis=1)
+                    
+                    master_data['MGM'] = {'y_true': y_true, 'y_prob': y_prob, 'y_pred': y_pred, 'family': 'mgm'}
+                    print("  [OK] Loaded: MGM")
+                except Exception as e:
+                    print(f"  [WARN] Failed to load MGM: {e}")
+            else:
+                print(f"  [WARN] Cannot load MGM. Global labels.csv not found at {labels_path}")
+            
+            continue # Skip the standard unified parser
+        
+        # =========================================================
+        # UNIFIED PARSER FOR MIKROPML, DEEPMICRO, MDLM, ALPHA
+        # =========================================================
+        elif 'mikropml' in path_components:
+            base_family = 'mikropml'
+            fw_display = 'mikropml'
+            full_name = f"{fw_display} ({model_name_raw.upper()})"
+        elif 'deepmicro' in path_components:
+            base_family = 'deepmicro'
+            fw_display = 'DeepMicro'
+            full_name = f"{fw_display} ({model_name_raw.upper()})"
+        elif 'alpha' in path_components:
+            base_family = 'alpha'
+            fw_display = 'Alpha Diversity'
+            full_name = f"{fw_display} ({model_name_raw.upper()})"
+        elif 'mdlm' in path_components or model_name_raw.upper() == 'MDLM':
+            base_family = 'mdlm'
+            full_name = 'MDLM'
+        else:
+            base_family = 'unknown'
+            full_name = model_name_raw.upper()
+
+        try:
+            df = pd.read_csv(file_path)
+            
+            # Standardization mapping
+            if 'Actual' in df.columns:
                 if df['Actual'].dtype == object:
                     y_true = df['Actual'].map({'Healthy': 0, 'IBD': 1}).values
                 else:
                     y_true = df['Actual'].values
-                
+            else:
+                raise KeyError("Missing 'Actual' column")
+
+            # Extract Probability
+            if 'IBD' in df.columns:
                 y_prob = df['IBD'].values
+            else:
+                raise KeyError("Missing 'IBD' probability column")
                 
+            # Extract Binary Prediction
+            if 'Predicted' in df.columns:
                 if df['Predicted'].dtype == object:
                     y_pred = df['Predicted'].map({'Healthy': 0, 'IBD': 1}).values
                 else:
                     y_pred = df['Predicted'].values
-                    
-                master_data[full_name] = {'y_true': y_true, 'y_prob': y_prob, 'y_pred': y_pred}
-                print(f"  [OK] Loaded: {full_name}")
-            except Exception as e:
-                print(f"  [WARN] Failed to load {file_path}: {e}")
+            else:
+                y_pred = (y_prob >= 0.5).astype(int)
 
-    # 2. MDLM
-    mdlm_path = os.path.join(input_dir, 'mdlm', 'sample_predictions.csv')
-    if os.path.exists(mdlm_path):
-        try:
-            df_mdlm = pd.read_csv(mdlm_path) 
-            y_true = df_mdlm['disease_tag'].values
-            y_prob = df_mdlm['raw_probability'].values
-            y_pred = df_mdlm['prediction_disease'].values
+            master_data[full_name] = {'y_true': y_true, 'y_prob': y_prob, 'y_pred': y_pred, 'family': base_family}
+            print(f"  [OK] Loaded: {full_name}")
             
-            master_data['MDLM'] = {'y_true': y_true, 'y_prob': y_prob, 'y_pred': y_pred}
-            print("  [OK] Loaded: MDLM")
         except Exception as e:
-            print(f"  [WARN] Failed to load MDLM: {e}")
+            print(f"  [WARN] Failed to load {file_path}: {e}")
 
-    # 3. MGM
-    mgm_path = os.path.join(input_dir, 'mgm', 'y_score.csv')
-    if os.path.exists(mgm_path) and os.path.exists(labels_path):
-        try:
-            scores_df = pd.read_csv(mgm_path, index_col=0)
-            scores_df.columns = scores_df.columns.astype(str)
-            labels_df = pd.read_csv(labels_path)
-            
-            merged_df = labels_df.merge(scores_df, left_on=labels_df.columns[0], right_index=True, how='inner')
-            
-            logits = merged_df[['0', '1']].values
-            logits_stable = logits - np.max(logits, axis=1, keepdims=True)
-            probs = np.exp(logits_stable) / np.sum(np.exp(logits_stable), axis=1, keepdims=True)
-            
-            y_true = merged_df['Label'].values
-            y_prob = probs[:, 1]
-            y_pred = np.argmax(probs, axis=1)
-            
-            master_data['MGM'] = {'y_true': y_true, 'y_prob': y_prob, 'y_pred': y_pred}
-            print("  [OK] Loaded: MGM")
-        except Exception as e:
-            print(f"  [WARN] Failed to load MGM: {e}")
-            
     return master_data
 
 
-def run_benchmarking(input_dir, labels_path, out_dir):
+def run_benchmarking(input_dir, labels_path, out_dir, mode):
     os.makedirs(os.path.join(out_dir, 'figures'), exist_ok=True)
     os.makedirs(os.path.join(out_dir, 'metrics'), exist_ok=True)
     
-    # Extract raw folder name (e.g., "run1")
+    # Extract raw folder name (e.g., "run10")
     run_name = os.path.basename(os.path.normpath(input_dir))
     
-    # Format for professional plot titles (e.g., "run1" -> "Fold 1")
-    display_name = run_name.replace('run', 'Fold ')
-    
+    # Conditional title formatting
+    if mode.lower() == 'random':
+        match = re.search(r'\d+', run_name)
+        fraction = match.group() if match else "0"
+        display_name = f"Training set {fraction}%"
+    else:
+        display_name = run_name.replace('run', 'Fold ')
+        
     master_data = load_standardized_data(input_dir, labels_path)
+
     if not master_data:
         print("[ERROR] No valid prediction files found. Check your input paths.")
         return
@@ -162,7 +202,8 @@ def run_benchmarking(input_dir, labels_path, out_dir):
         
         operational_f1 = f1_score(y_true, y_pred, zero_division=0) 
         
-        base_family = model_name.split()[0].lower()
+        # Sort hierarchy logic
+        base_family = data.get('family', 'unknown')
         sort_index = order_hierarchy.index(base_family) if base_family in order_hierarchy else 99
         
         results_list.append({
@@ -186,7 +227,7 @@ def run_benchmarking(input_dir, labels_path, out_dir):
 
     results_df = pd.DataFrame(results_list).sort_values(by=['_sort_idx', 'Model'])
     export_df = results_df.drop(columns=['_sort_idx', '_tpr', '_fpr', '_precision', '_recall'])
-    export_df.to_csv(os.path.join(out_dir, 'metrics', 'master_benchmarking_metrics.csv'), index=False)
+    export_df.to_csv(os.path.join(out_dir, 'metrics', f'benchmarking_metrics_{run_name}.csv'), index=False)
 
     colors = sns.color_palette("husl", len(results_df))
     fig_roc, ax_roc = plt.subplots(figsize=(8, 6))
@@ -206,7 +247,7 @@ def run_benchmarking(input_dir, labels_path, out_dir):
     ax_roc.legend(loc="lower right", fontsize=9)
     ax_roc.grid(alpha=0.3)
     fig_roc.tight_layout()
-    fig_roc.savefig(os.path.join(out_dir, 'figures', 'comparative_roc_curves.png'), dpi=300)
+    fig_roc.savefig(os.path.join(out_dir, 'figures', f'roc_curves_{run_name}.png'), dpi=300)
     plt.close(fig_roc)
 
     first_model = list(master_data.keys())[0]
@@ -220,7 +261,7 @@ def run_benchmarking(input_dir, labels_path, out_dir):
     ax_pr.legend(loc="lower left", fontsize=9)
     ax_pr.grid(alpha=0.3)
     fig_pr.tight_layout()
-    fig_pr.savefig(os.path.join(out_dir, 'figures', 'comparative_pr_curves.png'), dpi=300)
+    fig_pr.savefig(os.path.join(out_dir, 'figures', f'pr_curves_{run_name}.png'), dpi=300)
     plt.close(fig_pr)
 
     metrics_to_plot = ['ROC_AUC', 'Accuracy', 'Balanced_Accuracy', 'Sensitivity', 'Specificity', 'F1_Score', 'MCC']
@@ -238,7 +279,7 @@ def run_benchmarking(input_dir, labels_path, out_dir):
     plt.legend(loc='lower right', bbox_to_anchor=(1.15, 0))
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, 'figures', 'comparative_metrics_barplot.png'), dpi=300)
+    plt.savefig(os.path.join(out_dir, 'figures', f'metrics_barplot_{run_name}.png'), dpi=300)
     plt.close()
 
     from sklearn.calibration import calibration_curve
@@ -257,7 +298,7 @@ def run_benchmarking(input_dir, labels_path, out_dir):
     plt.legend(loc='lower right', fontsize=9)
     plt.grid(True, linestyle=':', alpha=0.6)
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, 'figures', 'multi_model_calibration_curve.png'), dpi=300)
+    plt.savefig(os.path.join(out_dir, 'figures', f'calibration_curve_{run_name}.png'), dpi=300)
     plt.close()
     
     models = export_df['Model'].values
@@ -297,19 +338,20 @@ def run_benchmarking(input_dir, labels_path, out_dir):
             
     fig.suptitle(f'Probability Density Distributions by Model - {display_name}', fontsize=16, fontweight='bold', y=1.02)
     plt.tight_layout()
-    plt.savefig(os.path.join(out_dir, 'figures', 'multi_model_probability_densities.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(out_dir, 'figures', f'probability_densities_{run_name}.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
     print("\n=== BENCHMARKING COMPLETE ===")
-    print(f"Master Metrics Table saved to: {out_dir}/metrics/master_benchmarking_metrics.csv")
-    print(f"All figures saved to:          {out_dir}/figures/")
+    print(f"Metrics Table saved to: {out_dir}/metrics/benchmarking_metrics_{run_name}.csv")
+    print(f"All figures saved to:   {out_dir}/figures/")
     
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Universal benchmarking suite for microbiome ML models.")
-    parser.add_argument("-i", "--input", required=False, default="input", help="Root input directory containing model results.")
-    parser.add_argument("-l", "--labels", required=False, default="input/labels.csv", help="Path to external labels CSV.")
-    parser.add_argument("-o", "--outdir", required=False, default="benchmarking_results", help="Output destination directory.")
+    parser = argparse.ArgumentParser(description="Universal benchmarking suite for nested microbiome ML models.")
+    parser.add_argument("-i", "--input_dir", required=True, help="Run-specific directory containing model subfolders.")
+    parser.add_argument("-l", "--labels", required=False, default="data/input/labels.csv", help="Path to external labels CSV (fallback).")
+    parser.add_argument("-o", "--outdir", required=True, help="Output destination directory.")
+    parser.add_argument("--mode", required=False, default="loco", help="Pipeline mode: 'loco' or 'random'")
     
     args = parser.parse_args()
-    run_benchmarking(args.input, args.labels, args.outdir)
+    run_benchmarking(args.input_dir, args.labels, args.outdir, args.mode)

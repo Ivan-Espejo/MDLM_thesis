@@ -159,7 +159,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-l", "--labels", 
         required=False, 
-        default="input/labels.csv",
+        default="../data/input/labels.csv",
         help="Path to the true labels CSV."
     )
     parser.add_argument(

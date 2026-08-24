@@ -20,8 +20,8 @@ Workflow:
 
 Usage Example:
     python Attribution_calculations.py \
-        --data_path input/512_embed_otu.npy \
-        --label_path input/label_clean.npy \
+        --data_path ../output/preprocessing/MDLM_Global/512_embed_otu.npy \
+        --label_path ../output/preprocessing/MDLM_Global/label.npy \
         --output_dir custom_results/
 =============================================================================
 """
@@ -71,14 +71,13 @@ class ElectraDiscriminator(nn.Module):
             embed_weights = torch.load(embed_layer, map_location='cpu')
 
         # Initialize the embedding layer
-        # Initialize the embedding layer
         self.embed_layer = nn.Embedding.from_pretrained(embeddings.to(torch.float32), freeze=False, padding_idx=26728)
         
         # Load embedding weights dynamically depending on the key format
         if 'embed_layer.weight' in embed_weights:
             self.embed_layer.load_state_dict({'weight': embed_weights['embed_layer.weight']})
         elif 'weight' in embed_weights:
-             self.embed_layer.load_state_dict({'weight': embed_weights['weight']})
+            self.embed_layer.load_state_dict({'weight': embed_weights['weight']})
         # If the embedding weights aren't explicitly saved separately, we just proceed with the base GloVe
         
         # Initialize the main HuggingFace ELECTRA model
@@ -90,15 +89,19 @@ class ElectraDiscriminator(nn.Module):
             disc_weights = torch.load(disc_layer, map_location='cpu')
             
         self.discriminator.load_state_dict(disc_weights, strict=False)
-        self.softmax = nn.Softmax(dim=1)
+        # self.softmax = nn.Softmax(dim=1)
 
-    def forward(self,data,attention_mask,labels):
+    def forward(self, data, attention_mask, labels):
         data = self.embed_layer(data)
-        output = self.discriminator(attention_mask=attention_mask,inputs_embeds=data,labels=labels, output_hidden_states=True)
-        scores = self.softmax(output['logits'])
+        output = self.discriminator(attention_mask=attention_mask, inputs_embeds=data, labels=labels, output_hidden_states=True)
+        
+        # Bypass the computationally redundant softmax calculation
+        logits = output['logits']
         loss = output['loss']
         last_hidden = output['hidden_states'][-1]
-        return loss, scores, last_hidden
+        
+        # Return raw logits to maintain the 3-item tuple unpacking downstream
+        return loss, logits, last_hidden
     
 class ElectraClassificationHead(nn.Module):
     """
@@ -169,7 +172,7 @@ class ElectraEnsemble(nn.Module):
         self.load_disc_path = model_files[0]
         self.config_path = os.path.join(os.path.dirname(self.load_disc_path), "config.json")
         if not os.path.exists(self.config_path):
-            self.config_path = "input/Models/pretrainedmodels/5head5layer_epoch105_disc/config.json"
+            self.config_path = "../data/models/MDLM_Models/pretrainedmodels/5head5layer_epoch105_disc/config.json"
 
         self.load_embed_path = self.load_disc_path 
 
@@ -203,12 +206,14 @@ class ElectraEnsemble(nn.Module):
     def forward(self, x, labels = None, attention_mask = None):
         if labels is None:
             labels = torch.ones((x.size()[0], 1)).to(torch.long)
-        loss, scores, z = self.electra(x.to(self.device), labels = labels.to(self.device), attention_mask = attention_mask)
+        loss, scores, z = self.electra(x.to(self.device), labels=labels.to(self.device), attention_mask = attention_mask)
         preds, pre_avg = self.ensemble(z)
         return preds, z, pre_avg
 
     def load_new_discriminator(self, path):
         self.electra = ElectraDiscriminator(self.config, torch.from_numpy(self.train_dataset.embeddings).to(torch.float32), path, self.load_embed_path).to(self.device)
+
+
 
 # ==========================================
 # MAIN EXECUTION PIPELINE
@@ -221,11 +226,12 @@ def main(args):
 
     MY_DATA_PATH = args.data_path
     MY_LABEL_PATH = args.label_path
+    SAMPLE_NAMES_PATH = args.sample_names_path  # <-- NEW: Path to the string IDs
     VOCAB_PATH = args.vocab_path
     MODELS_PATH = args.models_path
     OUTPUT_DIR = args.output_dir
     SEQ_LENGTH = args.seq_length
-    BATCH_SIZE = 1 # Must remain 1 for the leave-one-out sequence generation
+    BATCH_SIZE = 32
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -234,11 +240,17 @@ def main(args):
 
     data_np = np.load(MY_DATA_PATH).astype(np.float32)
     labels_np = np.load(MY_LABEL_PATH)
-    #vocab_np = np.load(VOCAB_PATH).astype(np.float32)
+    
+    # Load the actual string sample names
+    with open(SAMPLE_NAMES_PATH, "r") as f:
+        sample_names = [line.strip() for line in f if line.strip()]
+        
+    if len(sample_names) != len(labels_np):
+        raise ValueError(f"CRITICAL ERROR: Number of sample names ({len(sample_names)}) does not match labels ({len(labels_np)}).")
 
     current_dataset = ELECTRADataset(data_np, VOCAB_PATH, labels_np)
-    data_loader = torch.utils.data.DataLoader(current_dataset, batch_size=BATCH_SIZE, num_workers=0, shuffle=False)
-
+    data_loader = torch.utils.data.DataLoader(current_dataset, batch_size=BATCH_SIZE, num_workers=0, pin_memory=False, shuffle=False)
+    
     ee = ElectraEnsemble(
         num_ffs=10, 
         models_path=MODELS_PATH, 
@@ -249,30 +261,36 @@ def main(args):
     ).to(device)
     ee.eval()
 
-# --- 3. GENERATE BASE SCORES ---
+    # --- 3. GENERATE BASE SCORES ---
     print("\n[2/4] Generating Base Probability Scores...")
     all_scores = []
-    data_iter = tqdm.tqdm(data_loader, desc="Base Inference", bar_format="{l_bar}{r_bar}")
+    
+    # We set mininterval=2.0 to prevent tqdm from hammering the slurm log file
+    data_iter = tqdm.tqdm(data_loader, desc="Base Inference", bar_format="{l_bar}{r_bar}", mininterval=2.0)
 
     with torch.no_grad():
-        for data in data_iter:
-            input_ids = data['electra_input'].to(device).long()[:, :SEQ_LENGTH]
-            frequencies = data['species_frequencies'].to(device).to(torch.float32)[:, :SEQ_LENGTH]
-            labels = data['electra_label'].to(device).long()
+        # FIX: Added enumerate() to safely capture batch_idx
+        for batch_idx, data in enumerate(data_iter):
+            input_ids = data['electra_input'].to(device, non_blocking=True).long()[:, :SEQ_LENGTH]
+            labels = data['electra_label'].to(device, non_blocking=True).long()
             
-            # Mask out the padding tokens based on input IDs
-            zero_boolean = torch.eq(input_ids, 0) # 0 is the [PAD] token ID
+            # Mask out the padding tokens
+            zero_boolean = torch.eq(input_ids, 0)
             mask = torch.ones(zero_boolean.shape, dtype=torch.float, device=device).masked_fill(zero_boolean, 0)
             
             # Extract raw outputs from the ensemble
             pred_logits, _, _ = ee(input_ids, labels=labels, attention_mask=mask)
             
-            # DO NOT use Softmax. The MSE training already scaled this to a 0-1 range.
-            # Just safely clip it between 0 and 1 in case the linear output overshot slightly (e.g., 1.05 or -0.02)
-            raw_ibd_prob = pred_logits[0][1].item()
-            clipped_prob = max(0.0, min(1.0, raw_ibd_prob))
+            # Vectorized Softmax across the entire batch (Shape: [Batch_Size, 2])
+            probs = torch.softmax(pred_logits, dim=-1)
             
-            all_scores.append(clipped_prob)
+            # Extract P(IBD) for all samples in the batch and move to CPU
+            ibd_probs = probs[:, 1].cpu().tolist()
+            all_scores.extend(ibd_probs)
+
+            # Now batch_idx is properly defined and won't crash
+            print(f"DEBUG: Batch {batch_idx+1} Complete.", flush=True)
+
 
     base_scores = torch.tensor(all_scores)
     torch.save(base_scores, os.path.join(OUTPUT_DIR, "custom_65_base_scores.pth"))
@@ -281,7 +299,6 @@ def main(args):
     # --- 4. PERFORMANCE EVALUATION ---
     print("\n[3/4] Evaluating Model Accuracy on Custom Data...")
     labels_1d = labels_np[:, 0] if len(labels_np.shape) > 1 else labels_np
-
 
     # Calculate the optimal threshold using the Youden's J statistic
     fpr, tpr, thresholds = roc_curve(labels_1d, base_scores.numpy())
@@ -301,7 +318,7 @@ def main(args):
     print(f"Confusion Matrix:\n{cm}")
 
     with open(os.path.join(OUTPUT_DIR, "evaluation_metrics.txt"), "w") as f:
-        f.write("=== MGM Custom Data Evaluation ===\n")
+        f.write("=== MDLM Custom Data Evaluation ===\n")
         f.write(f"Total Samples: {len(labels_1d)}\n")
         f.write(f"Accuracy:      {acc * 100:.2f}%\n")
         f.write(f"AUROC:         {auc:.4f}\n\n")
@@ -310,16 +327,30 @@ def main(args):
         f.write("\n")
     print(f"  -> Saved: {os.path.join(OUTPUT_DIR, 'evaluation_metrics.txt')}")
     
-    # Save per-sample tabular predictions
-    results_df = pd.DataFrame({
-        'sample_name': range(1, len(labels_1d) + 1),
-        'disease_tag': labels_1d.astype(int),
-        'prediction_disease': preds,
-        'raw_probability': base_scores.numpy()
-    })
-    results_df.to_csv(os.path.join(OUTPUT_DIR, "sample_predictions.csv"), index=False)
-    print(f"  -> Saved: {os.path.join(OUTPUT_DIR, 'sample_predictions.csv')}")
+    # --- 5. FORMAT AND SAVE PREDICTIONS ---
+    print("\n[4/4] Formatting Output to match mikropml standard...")
+    
+    # mikropml standard expects text labels: Healthy and IBD
+    str_actual = ["IBD" if l == 1 else "Healthy" for l in labels_1d]
+    str_preds = ["IBD" if p == 1 else "Healthy" for p in preds]
+    
+    # The network predicts P(IBD). Therefore P(Healthy) = 1 - P(IBD)
+    prob_ibd = base_scores.numpy()
+    prob_healthy = 1.0 - prob_ibd
 
+    results_df = pd.DataFrame({
+        'SampleID': sample_names,
+        'Actual': str_actual,
+        'Predicted': str_preds,
+        'Healthy': prob_healthy,
+        'IBD': prob_ibd
+    })
+    
+    results_df.to_csv(os.path.join(OUTPUT_DIR, "sample_predictions.csv"), index=False)
+    print(f"  -> Saved perfectly mapped predictions: {os.path.join(OUTPUT_DIR, 'sample_predictions.csv')}")
+
+
+# ==========================================
 # COMMAND LINE ARGUMENT PARSING
 # ==========================================
 
@@ -328,15 +359,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Attribution Calculations for MDLM sequence data.")
     
     parser.add_argument("--data_path", type=str, default='output/preprocessing/512_embed_otu.npy', 
-                        help="Path to the custom dataset array (e.g., input/512_embed_otu.npy)")
+                        help="Path to the custom dataset array")
     
     parser.add_argument("--label_path", type=str, default='output/preprocessing/label.npy', 
                         help="Path to the custom integer label array")
+                        
+    # --> NEW ARGUMENT <--
+    parser.add_argument("--sample_names_path", type=str, required=True,
+                        help="Path to the text file containing the original string Sample IDs")
     
-    parser.add_argument("--vocab_path", type=str, default='input/GloVe_data/vocab_embeddings.npy', 
+    parser.add_argument("--vocab_path", type=str, default='../data/references/GloVe_data/vocab_embeddings.npy', 
                         help="Path to the pretrained vocabulary embeddings array")
     
-    parser.add_argument("--models_path", type=str, default='input/Models/ensemble', 
+    parser.add_argument("--models_path", type=str, default='../data/models/MDLM_Models/ensemble', 
                         help="Path to the pretrained 10-model ELECTRA ensemble directory")
                         
     parser.add_argument("--output_dir", type=str, default='output/', 
@@ -346,4 +381,5 @@ if __name__ == "__main__":
                         help="Maximum sequence length of the transformer model (default: 512)")
                         
     args = parser.parse_args()
+    print("Is something fucking working????")
     main(args)

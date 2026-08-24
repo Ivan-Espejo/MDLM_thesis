@@ -19,7 +19,7 @@ source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate 4-blast_env
 
 QUERY_FASTA="${1:-./output/preprocessing/global_V4.fasta}"
-EMBED_FASTA="${2:-./input/GloVe_data/seqs_.07_embed.fasta}"
+EMBED_FASTA="${2:-../data/references/GloVe_data/seqs_.07_embed.fasta}"
 
 OUT_DIR="output/preprocessing/tmp"
 RAW_HITS="$OUT_DIR/blast_hits.tsv"

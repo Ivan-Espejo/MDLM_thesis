@@ -15,19 +15,14 @@ This repository intentionally does not include large data files, pretrained mode
 
 The following paths are excluded from version control:
 
-- 0-Data_transformation/.Database/
-- 0-Data_transformation/.output/
-- 0-Data_transformation/User_input/
-- 4-MDLM/data/GloVe_data/
-- 4-MDLM/data/MDLM_Models/
-- 5-MGM/data/silva132/
+- data/ (the external reproducibility bundle; see `data/README.md`)
 - large model weight files such as .bin, .pt, .pth, .ckpt, .npy, .fasta, and .zip artifacts
 
 ## Getting started
 
 1. Clone the repository.
 2. Create a Python environment and install the required dependencies for the relevant workflow.
-3. Download or generate the required datasets and model files outside of version control.
+3. Unzip the external data bundle into the repository root, preserving the `data/` layout described in `data/README.md`.
 4. Run the scripts from the appropriate module directory.
 
 ## Notes

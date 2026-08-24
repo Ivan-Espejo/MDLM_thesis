@@ -9,8 +9,8 @@
 source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate vsearch_env
 
-QUERY_FASTA="${1:-./input/merged_seqs.fasta}"
-SILVA_FASTA="${2:-./input/silva132/SILVA_132_SSURef_NR99_DNA.fasta}"
+QUERY_FASTA="${1:-../data/input/merged_seqs.fasta}"
+SILVA_FASTA="${2:-../data/references/silva132/SILVA_132_SSURef_NR99_DNA.fasta}"
 
 OUT_DIR="output/preprocessing/tmp"
 RAW_HITS="$OUT_DIR/vsearch_hits.tsv"
@@ -83,7 +83,7 @@ END {
             print q "\t" silva_to_tax[s];
         }
     }
-}' output/preprocessing/tmp/best_hits.tsv input/silva132/SILVA_132_SSURef_NR99_DNA.fasta > output/preprocessing/tmp/query_to_taxonomy.tsv
+}' output/preprocessing/tmp/best_hits.tsv "$SILVA_FASTA" > output/preprocessing/tmp/query_to_taxonomy.tsv
 
 echo "Extracting taxonomic lineages for the aligned hits..."
 MAPPING_FILE="$OUT_DIR/query_to_taxonomy.tsv"

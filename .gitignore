@@ -1,20 +1,31 @@
-# Python cache and virtual environments
+# Python, notebook, and editor artifacts
 __pycache__/
 *.py[cod]
 *.so
 .venv/
 venv/
 env/
-
-# Jupyter and editor artifacts
 .ipynb_checkpoints/
 .vscode/
 .DS_Store
 
-# Large data/model artifacts
-*.zip
+# Nested repositories and local logs
+**/.git/
+*.log
+logs_*/
+tmp/
+
+# Reference databases and sequence assets
 *.fasta
+*.fa
+*.fna
+*.qza
+*.biom
+
+# Trained models and serialized numerical artifacts
+*.zip
 *.npy
+*.npz
 *.bin
 *.pt
 *.pth
@@ -24,11 +35,6 @@ env/
 *.model
 *.onnx
 *.parquet
-
-# Project-specific large datasets and pretrained models
-0-Data_transformation/.Database/
-0-Data_transformation/.output/
-0-Data_transformation/User_input/
-4-MDLM/data/GloVe_data/
-4-MDLM/data/MDLM_Models/
-5-MGM/data/silva132/
+# External reproducibility bundle; keep only its manifest in Git
+data/*
+!data/README.md

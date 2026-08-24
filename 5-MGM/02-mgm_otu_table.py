@@ -132,7 +132,7 @@ def process_otu_table(otu_table_path, mapping_path, output_path, log_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert raw OTU table to collapsed MGM format.")
     
-    parser.add_argument("-i", "--otu_table", required=False, help="Path to raw OTU table (TSV).", default="input/raw_global_otu_dedup.tsv")
+    parser.add_argument("-i", "--otu_table", required=False, help="Path to raw OTU table (TSV).", default="../data/input/raw_global_otu_dedup.tsv")
     parser.add_argument("-m", "--mapping", required=False, help="Path to VSEARCH mapping file.",default="output/preprocessing/tmp/query_to_taxonomy.tsv")
     parser.add_argument("-o", "--output", required=False, help="Path to save MGM-ready CSV.", default="output/preprocessing/mgm_ready_otu_table.csv")
     parser.add_argument("-l", "--log", required=False, help="Path to pipeline log file to append summary.", default = "output/preprocessing/tmp/pipeline_drops.log")

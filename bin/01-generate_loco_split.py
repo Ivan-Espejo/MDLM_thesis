@@ -15,17 +15,19 @@ import os
 import itertools
 import random
 
-def generate_splits(metadata_path, out_dir, num_runs=None):
-    # Load metadata
-    df = pd.read_csv(metadata_path, sep='\t')
-    df['dx_binary'] = df['diagnosis'].apply(lambda x: 'IBD' if 'IBD' in str(x) else 'Healthy')
+def generate_splits(labels_path, out_dir, num_runs=None):
+    # Load labels
+    df = pd.read_csv(labels_path)
     
     # Calculate project-level statistics
+    # Since Label is binary (1=IBD, 0=Healthy), sum(Label) gives the exact IBD count
     stats = df.groupby('study_id').agg(
-        Total=('sample_id', 'count'),
-        Healthy=('dx_binary', lambda x: (x == 'Healthy').sum()),
-        IBD=('dx_binary', lambda x: (x == 'IBD').sum())
+        Total=('Sample_Name', 'count'),
+        IBD=('Label', 'sum')
     ).reset_index()
+    
+    # Healthy count is just Total minus IBD
+    stats['Healthy'] = stats['Total'] - stats['IBD']
     
     global_total = stats['Total'].sum()
     projects = stats['study_id'].tolist()
@@ -55,6 +57,11 @@ def generate_splits(metadata_path, out_dir, num_runs=None):
             tr_total = tr_stats['Total'].sum()
             tr_ibd = tr_stats['IBD'].sum()
             tr_healthy = tr_stats['Healthy'].sum()
+            
+            # Avoid division by zero
+            if tr_total == 0:
+                continue
+                
             tr_ibd_ratio = tr_ibd / tr_total
             
             if not (0.42 <= tr_ibd_ratio <= 0.58):
@@ -103,11 +110,11 @@ def generate_splits(metadata_path, out_dir, num_runs=None):
         run_dir = os.path.join(out_dir, f"run{i}")
         os.makedirs(run_dir, exist_ok=True)
         
-        # Write project string files
+        # Write project string files (NOW SEPARATED BY NEWLINE)
         with open(os.path.join(run_dir, "train_projects.txt"), "w") as f:
-            f.write(" ".join(split['train_projects']))
+            f.write("\n".join(split['train_projects']))
         with open(os.path.join(run_dir, "test_projects.txt"), "w") as f:
-            f.write(" ".join(split['test_projects']))
+            f.write("\n".join(split['test_projects']))
             
         # Write detailed info log
         info_path = os.path.join(run_dir, f"run{i}_info.txt")
@@ -130,7 +137,7 @@ def generate_splits(metadata_path, out_dir, num_runs=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-m", "--metadata", required=True, help="Path to clean metadata file")
+    parser.add_argument("-l", "--labels", required=True, help="Path to labels.csv")
     parser.add_argument("-o", "--outdir", required=True, help="Root directory to generate run folders")
     
     # 'default=None' means if you don't use -r, it generates everything
@@ -138,4 +145,4 @@ if __name__ == "__main__":
                         help="Number of split permutations to keep. If omitted, generates ALL valid combinations.")
     args = parser.parse_args()
     
-    generate_splits(args.metadata, args.outdir, args.runs)
+    generate_splits(args.labels, args.outdir, args.runs)

@@ -108,7 +108,7 @@ def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument("--asv", default="output/preprocessing/global_V4_otu.tsv")
     p.add_argument("--blast", default="output/preprocessing/tmp/best_hits.tsv")
-    p.add_argument("--labels", default="input/labels.csv")
+    p.add_argument("--labels", default="../data/input/labels.csv")
     p.add_argument("--fasta", default="output/preprocessing/global_V4.fasta")
     p.add_argument("--out_npy", default="output/preprocessing/512_embed_otu.npy")
     p.add_argument("--out_lbl", default="output/preprocessing/label.npy")

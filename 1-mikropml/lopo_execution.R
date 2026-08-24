@@ -1,13 +1,12 @@
 #!/usr/bin/env Rscript
 
 # =============================================================================
-# LOPO OTU Classification Pipeline (via mikropml)
+# Dual-Mode OTU Classification Pipeline (via mikropml)
 # =============================================================================
 # Description:
-# Adapted for Leave-One-Project-Out (LOPO) cross-validation. This script takes
-# strictly defined Train and Test datasets. It dynamically aligns their features 
-# (filling missing OTUs with 0s) and processes them simultaneously to ensure 
-# identical scaling and topography before model evaluation.
+# Adapted for both Leave-One-Project-Out (LOCO) and Random Learning Curve 
+# cross-validation. It dynamically aligns Train/Test features (filling missing 
+# OTUs with 0s) and processes them simultaneously without data leakage.
 # =============================================================================
 
 # 0. Package loading
@@ -20,7 +19,7 @@ library(this.path)
 library(optparse)
 library(data.table)
 
-# 0.5 Doing parallel execution #
+# 0.5 Doing parallel execution
 registerDoFuture()
 plan(multisession, workers = 8)
 options(doFuture.rng.onMisuse = "ignore")
@@ -32,10 +31,11 @@ options(width = as.numeric(system("tput cols", intern = TRUE)))
 
 # Parsing arguments 
 option_list = list(
-  make_option(c("--train_otu"), type="character", default=NULL, help="Path to the Training OTU table file"),
-  make_option(c("--train_labels"), type="character", default=NULL, help="Path to the Training label file"),
-  make_option(c("--test_otu"), type="character", default=NULL, help="Path to the Testing OTU table file"),
-  make_option(c("--test_labels"), type="character", default=NULL, help="Path to the Testing label file"),
+  make_option(c("--mode"), type="character", default="loco", help="Execution mode: 'loco' or 'random'"),
+  make_option(c("--train_file"), type="character", default=NULL, help="Path to text file listing train IDs (projects or samples)"),
+  make_option(c("--test_file"), type="character", default=NULL, help="Path to text file listing test IDs (projects or samples)"),
+  make_option(c("--otu"), type="character", default="../data/input/raw_global_otu_dedup.tsv", help="Path to unified OTU table"),
+  make_option(c("--labels"), type="character", default="../data/input/labels.csv", help="Path to labels CSV (Sample_Name,Label,study_id)"),
   make_option(c("--output_dir"), type="character", default=NULL, help="Directory to save output files")
 )
 
@@ -43,34 +43,55 @@ opt_parser = OptionParser(option_list=option_list)
 opt = parse_args(opt_parser)
 
 # Enforce mandatory arguments
-if (any(sapply(list(opt$train_otu, opt$train_labels, opt$test_otu, opt$test_labels, opt$output_dir), is.null))) {
+if (any(sapply(list(opt$train_file, opt$test_file, opt$output_dir), is.null))) {
   print_help(opt_parser)
-  stop("Critical Error: All input paths (--train_otu, --train_labels, --test_otu, --test_labels, --output_dir) are required.", call.=FALSE)
+  stop("Critical Error: --train_file, --test_file and --output_dir are required.", call.=FALSE)
 }
 
-cat("=== LOPO PIPELINE INITIALIZED ===\n")
-cat("Training OTU:  ", opt$train_otu, "\n")
-cat("Training LBL:  ", opt$train_labels, "\n")
-cat("Testing OTU:   ", opt$test_otu, "\n")
-cat("Testing LBL:   ", opt$test_labels, "\n")
-cat("Output Dir:    ", opt$output_dir, "\n\n")
+mode <- tolower(opt$mode)
+
+cat("=== MIKROPML PIPELINE INITIALIZED ===\n")
+cat("Mode:        ", toupper(mode), "\n")
+cat("Unified OTU: ", opt$otu, "\n")
+cat("Labels CSV:  ", opt$labels, "\n")
+cat("Train File:  ", opt$train_file, "\n")
+cat("Test File:   ", opt$test_file, "\n")
+cat("Output Dir:  ", opt$output_dir, "\n\n")
 
 setwd(this.path::this.dir())
 
 # 1. Load Data (Ensuring UnifiedID is character to prevent merge errors)
-train_otu_raw <- read_tsv(opt$train_otu, show_col_types = FALSE) %>% mutate(UnifiedID = as.character(UnifiedID))
-test_otu_raw <- read_tsv(opt$test_otu, show_col_types = FALSE) %>% mutate(UnifiedID = as.character(UnifiedID))
+otu_all <- read_tsv(opt$otu, show_col_types = FALSE) %>% mutate(UnifiedID = as.character(UnifiedID))
+labels_all <- read_csv(opt$labels, show_col_types = FALSE) %>% mutate(Sample_Name = as.character(Sample_Name))
 
-train_labels <- read_csv(opt$train_labels, show_col_types = FALSE) %>% mutate(Sample_Name = as.character(Sample_Name))
-test_labels <- read_csv(opt$test_labels, show_col_types = FALSE) %>% mutate(Sample_Name = as.character(Sample_Name))
+# Read list files (newline separated)
+train_list <- scan(opt$train_file, what = "", sep = "\n", quiet = TRUE)
+train_list <- unlist(strsplit(train_list, "\\s+"))
+test_list <- scan(opt$test_file, what = "", sep = "\n", quiet = TRUE)
+test_list <- unlist(strsplit(test_list, "\\s+"))
 
-# TEST
-#setwd(this.path::this.dir()) 
-#train_otu_raw <- read_tsv("./input/.output_train_rest/raw_global_otu_dedup.tsv", show_col_types = FALSE) %>% mutate(UnifiedID = as.character(UnifiedID))
-#test_otu_raw <- read_tsv("./input/.output_test_china/raw_global_otu_dedup.tsv", show_col_types = FALSE) %>% mutate(UnifiedID = as.character(UnifiedID))
+# Clean vectors: remove any empty strings
+train_list <- train_list[train_list != ""]
+test_list <- test_list[test_list != ""]
 
-#train_labels <- read_csv("./input/.output_train_rest/labels.csv", show_col_types = FALSE) %>% mutate(Sample_Name = as.character(Sample_Name))
-#test_labels <- read_csv("./input/.output_test_china/labels.csv", show_col_types = FALSE) %>% mutate(Sample_Name = as.character(Sample_Name))
+# 2. Dual-Mode Subsetting Logic
+if (mode == "loco") {
+  if (!"study_id" %in% colnames(labels_all)) stop("labels.csv must contain 'study_id' column for LOCO mode.")
+  train_labels <- labels_all[labels_all$study_id %in% train_list, , drop = FALSE]
+  test_labels  <- labels_all[labels_all$study_id %in% test_list, , drop = FALSE]
+} else if (mode == "random") {
+  train_labels <- labels_all[labels_all$Sample_Name %in% train_list, , drop = FALSE]
+  test_labels  <- labels_all[labels_all$Sample_Name %in% test_list, , drop = FALSE]
+} else {
+  stop("Invalid mode provided. Must be 'loco' or 'random'.")
+}
+
+# Subset OTU table to only columns present in labels (plus UnifiedID)
+train_sample_cols <- intersect(colnames(otu_all), train_labels$Sample_Name)
+test_sample_cols  <- intersect(colnames(otu_all), test_labels$Sample_Name)
+train_otu_raw <- otu_all %>% select(UnifiedID, any_of(train_sample_cols))
+test_otu_raw  <- otu_all %>% select(UnifiedID, any_of(test_sample_cols))
+
 
 #################################################
 ################# PREPROCESSING #################
@@ -78,7 +99,7 @@ test_labels <- read_csv(opt$test_labels, show_col_types = FALSE) %>% mutate(Samp
 
 print("Aligning and Preprocessing Feature Spaces...")
 
-# 2. Normalize Individually, then Pivot to Long Format
+# 3. Normalize Individually, then Pivot to Long Format
 train_long <- train_otu_raw |>
   select(-any_of(c("Taxon", "taxonomy", "Confidence"))) |>
   mutate(across(where(is.numeric), ~ .x / sum(.x))) |>
@@ -89,13 +110,13 @@ test_long <- test_otu_raw |>
   mutate(across(where(is.numeric), ~ .x / sum(.x))) |>
   pivot_longer(cols = -UnifiedID, names_to = "Sample_Name", values_to = "count")
 
-# 3. Combine and Pivot Wider
+# 4. Combine and Pivot Wider
 # values_fill = 0 safely fills in gaps where an OTU exists in Train but not Test (and vice-versa).
 otu_input <- bind_rows(train_long, test_long) |>
   pivot_wider(names_from = UnifiedID, values_from = count, values_fill = 0) |>
   rename_with(~ gsub("`", "", .x))
 
-# 4. Combine Labels and Map to OTU Table
+# 5. Combine Labels and Map to OTU Table
 combined_labels <- bind_rows(train_labels, test_labels)
 
 mikropml_input <- combined_labels |> 
@@ -106,86 +127,83 @@ mikropml_input <- combined_labels |>
   column_to_rownames("Sample_Name") |>
   rename_with(~ gsub(":", "_", .x))
 
-# 5. Preprocess together 
+# 6. Preprocess together 
 original_sample_names <- rownames(mikropml_input)
 
 mikropml_input_preproc <- preprocess_data(
   dataset = mikropml_input, 
-  outcome_colname= "dx"
+  outcome_colname= "dx",
+  method = NULL   # Safely cleans 0-variance features WITHOUT global scaling (prevents data leakage)
 )
 combined_transformed <- mikropml_input_preproc$dat_transformed
 
 # Re-attach the sample names to the transformed dataset
 rownames(combined_transformed) <- original_sample_names
 
-# 6. Define LOPO Partitions for run_ml()
-# Instead of splitting the dataframe, we tag each row as "Train" or "Test"
-group_vector <- ifelse(rownames(combined_transformed) %in% train_labels$Sample_Name, "Train", "Test")
-
-# Count the training samples to conditionally trigger Random Forest later
-n_train_samples <- sum(group_vector == "Train")
-
 #################################################
 ################ RUNNING MODELS #################
 #################################################
 
+# 7. Define Dual-Mode Partitions for run_ml()
+if (mode == "loco") {
+  # LOCO: Map samples to their biological study/project
+  sample_to_study <- combined_labels %>% select(Sample_Name, study_id) %>% deframe()
+  group_vector <- sapply(rownames(combined_transformed), function(s) sample_to_study[[s]])
+  train_split_arg <- train_list
+  test_split_arg <- test_list
+} else {
+  # RANDOM: Every sample is its own independent group. 
+  # This forces mikropml to perfectly respect our train_list and test_list.
+  group_vector <- rownames(combined_transformed) 
+  train_split_arg <- train_list
+  test_split_arg <- test_list
+}
+
+n_train_samples <- sum(rownames(combined_transformed) %in% train_labels$Sample_Name)
+
 print(paste("Initiating Training on", n_train_samples, "samples..."))
+print(paste("Train IDs:", paste(head(train_list, 5), collapse = ", "), "..."))
+print(paste("Test IDs:", paste(head(test_list, 5), collapse = ", "), "..."))
 
-# GLMNET
-print("Training glmnet...")
-results_glmnet <- run_ml(
-  dataset = combined_transformed, 
-  method = "glmnet", 
-  outcome_colname = "dx",
-  groups = group_vector,                                         # Pass the nametags
-  group_partitions = list(train = c("Train"), test = c("Test")), # Force the split
-  kfold = 5,
-  cv_times = 10,
-  seed = 23102004
-)
-
-# SVM (Radial)
-print("Training SVM (Radial)...")
-results_svm <- run_ml(
-  dataset = combined_transformed, 
-  method = "svmRadial", 
-  outcome_colname = "dx",
-  groups = group_vector,
-  group_partitions = list(train = c("Train"), test = c("Test")),
-  kfold = 5,
-  cv_times = 10,
-  seed = 23102004
-)
-
-# Structuring results mimicking mikropml's standard output
-model_results <- list(
-  GLMNET = results_glmnet,
-  SVM = results_svm
-)
-
-# Random Forest conditionally based on training size
-if (n_train_samples > 100) {
-  print("Training sample size > 100 detected. Training Random Forest...")
-  results_rf <- run_ml(
-    dataset = combined_transformed, 
-    method = "rf",                      
+# Helper function for unified execution
+execute_mikropml <- function(method_name) {
+  run_ml(
+    dataset = combined_transformed,        # Pass the FULL dataset
+    method = method_name, 
     outcome_colname = "dx",
-    groups = group_vector,
-    group_partitions = list(train = c("Train"), test = c("Test")),
+    groups = group_vector,                 # Dual-mode group vector                         
+    group_partitions = list(train = train_split_arg, test = test_split_arg), # Python splits
     kfold = 5,
     cv_times = 10,
-    seed = 23102004
+    seed = 23102004,
+    preProcess = c("center", "scale")      # Dynamic, leakage-free scaling
   )
-  model_results$rf <- results_rf
-} else {
-  print("Training sample size <= 100. Skipping Random Forest.")
 }
+
+# --- GLMNET ---
+print("Training glmnet...")
+results_glmnet <- execute_mikropml("glmnet")
+
+# --- SVM (Radial) ---
+print("Training SVM (Radial)...")
+results_svm <- execute_mikropml("svmRadial")
+
+# --- Random Forest ---
+print("Training Random Forest...")
+results_rf <- execute_mikropml("rf")
+
+
+model_results <- list(
+  GLMNET = results_glmnet,
+  SVM = results_svm,
+  RF = results_rf
+)
 
 ################################################# 
 ############### GENERATING RESULTS ##############
 #################################################
 
-print(paste("Evaluating models on unseen LOPO test samples..."))
+print(paste("Evaluating models on unseen test samples..."))
 
 # 1. Create Organized Subdirectories
 out_dirs <- list(
@@ -251,12 +269,12 @@ p_cv <- ggplot(all_perf, aes(x = Model, y = cv_metric_AUC, fill = Model)) +
   theme_bw() +
   labs(
     title = "Cross-Validation AUROC Stability",
-    subtitle = "Distribution of AUC across repeated CV folds",
+    subtitle = paste("Distribution of AUC across repeated CV folds -", toupper(mode), "Mode"),
     y = "Cross-Validated AUC",
     x = "Algorithm"
   ) +
   theme(legend.position = "none", plot.title = element_text(face="bold"))
 
-ggsave(p_cv, filename = file.path(out_dirs$metrics, "CV_AUC_Distribution.png"), width = 7, height = 5)
+ggsave(p_cv, filename = file.path(out_dirs$metrics, paste0("CV_AUC_Distribution_", toupper(mode), ".png")), width = 7, height = 5)
 
-print("LOPO Pipeline execution completed successfully.")
+print(paste("Dual-Mode Pipeline execution completed successfully for", toupper(mode), "mode."))

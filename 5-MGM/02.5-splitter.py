@@ -1,76 +1,61 @@
 #!/usr/bin/env python3
 """
 =============================================================================
-Script: 02.5-lopo-split_data.py
-Author: Ivan Espejo
+Script: 02.5-splitter.py
+Author: Microbiome ML Master Pipeline
 
 Description:
-    Performs a Leave-One-Project-Out (LOPO) split of the MGM-ready OTU 
-    matrix and labels. It maps the sample IDs against a metadata file to 
-    isolate specific projects into the testing set, and target projects into 
-    the finetuning (training) set based on explicitly provided text lists.
+    Performs dual-mode slicing of the global collapsed MGM OTU table and 
+    labels. Isolates Train and Test subsets for MGM based on either 
+    'loco' (study_id) or 'random' (Sample_Name) definitions.
 =============================================================================
 """
 import pandas as pd
 import argparse
 import os
 
-def lopo_split_dataset(otu_table_path, labels_path, metadata_path, outdir, train_txt, test_txt):
-    print(f"\n[1/4] Loading data and metadata...")
+def dual_mode_split_mgm(mode, otu_table_path, labels_path, outdir, train_txt, test_txt):
+    print(f"\n[1/4] Loading MGM data for {mode.upper()} splitting...")
     print(f" - OTU Table: {otu_table_path}")
     print(f" - Labels:    {labels_path}")
-    print(f" - Metadata:  {metadata_path}")
     
-    # Load data
     labels = pd.read_csv(labels_path)
     otu = pd.read_csv(otu_table_path, index_col=0)
     
-    try:
-        # Assumes metadata is TSV. Change sep=',' if it is a CSV.
-        metadata = pd.read_csv(metadata_path, sep='\t')
-    except Exception as e:
-        print(f"Error loading metadata: {e}")
-        return
-        
     total_samples = labels.shape[0]
     print(f"Total samples loaded: {total_samples}")
 
-    print(f"\n[2/4] Executing LOPO Split Strategy")
+    print(f"\n[2/4] Executing {mode.upper()} Split Strategy")
     
-    # Read project strings from text files provided by the master orchestrator
+    # Read text lists (newline separated)
     with open(train_txt, 'r') as f:
-        train_projects = f.read().strip().split()
+        train_list = [line.strip() for line in f if line.strip()]
     with open(test_txt, 'r') as f:
-        test_projects = f.read().strip().split()
+        test_list = [line.strip() for line in f if line.strip()]
 
-    # Assume column 0 in labels.csv is the Sample_Name
-    sample_col_name = labels.columns[0]
+    # Create boolean masks based on mode
+    if mode == "loco":
+        if "study_id" not in labels.columns:
+            raise ValueError("labels.csv must contain 'study_id' for LOCO mode.")
+        train_mask = labels['study_id'].isin(train_list).values
+        test_mask = labels['study_id'].isin(test_list).values
+    elif mode == "random":
+        if "Sample_Name" not in labels.columns:
+            raise ValueError("labels.csv must contain 'Sample_Name' for RANDOM mode.")
+        train_mask = labels['Sample_Name'].isin(train_list).values
+        test_mask = labels['Sample_Name'].isin(test_list).values
+    else:
+        raise ValueError("Invalid mode. Must be 'loco' or 'random'.")
+
+    # Split labels (preserving Sample_Name and Label for MGM)
+    train_labels = labels[train_mask][['Sample_Name', 'Label']]
+    test_labels = labels[test_mask][['Sample_Name', 'Label']]
     
-    # Merge labels with metadata to fetch the study_id for each sample
-    merged = labels.merge(metadata, how='left', left_on=sample_col_name, right_on='sample_id')
-    
-    # Check for unmatched samples just in case
-    unmatched = merged['study_id'].isna().sum()
-    if unmatched > 0:
-        print(f"[WARNING] {unmatched} samples in labels.csv did not match any 'sample_id' in metadata.")
-
-    # Create boolean masks strictly using the provided project lists
-    train_mask = merged['study_id'].isin(train_projects).values
-    test_mask = merged['study_id'].isin(test_projects).values
-
-    # Split labels
-    train_labels = labels[train_mask]
-    test_labels = labels[test_mask]
-    
-    # Split metadata for tracking
-    train_metadata = merged[train_mask]
-    test_metadata = merged[test_mask]
-
     # Extract sample IDs to slice the OTU columns
-    train_samples = train_labels.iloc[:, 0].astype(str).tolist()
-    test_samples = test_labels.iloc[:, 0].astype(str).tolist()
+    train_samples = labels.loc[train_mask, 'Sample_Name'].astype(str).tolist()
+    test_samples = labels.loc[test_mask, 'Sample_Name'].astype(str).tolist()
     
-    # Safely slice (only keeping columns that actually exist in the OTU table)
+    # Safely slice OTU table (keeping columns present in the table)
     valid_train_samples = [s for s in train_samples if s in otu.columns]
     valid_test_samples = [s for s in test_samples if s in otu.columns]
 
@@ -84,39 +69,35 @@ def lopo_split_dataset(otu_table_path, labels_path, metadata_path, outdir, train
     print(f" -> Testing set (Test):     {len(test_samples)} samples ({(len(test_samples)/total_samples)*100:.1f}%)")
 
     if len(test_samples) == 0 or len(train_samples) == 0:
-        print("\n[WARNING] One of the sets is EMPTY. Check if the project IDs match the metadata exactly.")
+        print("\n[WARNING] One of the sets is EMPTY. Check if IDs match labels.csv exactly.")
 
-    print(f"\n[4/4] Exporting files...")
-    train_labels.to_csv(f"{outdir}/finetune_labels.csv", index=False)
-    test_labels.to_csv(f"{outdir}/test_labels.csv", index=False)
+    print(f"\n[4/4] Exporting MGM input files...")
+    train_labels.to_csv(os.path.join(outdir, "finetune_labels.csv"), index=False)
+    test_labels.to_csv(os.path.join(outdir, "test_labels.csv"), index=False)
     
-    train_otu.to_csv(f"{outdir}/finetune_abundances.csv")
-    test_otu.to_csv(f"{outdir}/test_abundances.csv")
+    train_otu.to_csv(os.path.join(outdir, "finetune_abundances.csv"))
+    test_otu.to_csv(os.path.join(outdir, "test_abundances.csv"))
     
-    # Export metadata trackers (useful for downstream plotting and batch effect checks)
-    train_metadata.to_csv(f"{outdir}/finetune_metadata.csv", index=False)
-    test_metadata.to_csv(f"{outdir}/test_metadata.csv", index=False)
-    
-    print(f"Successfully saved 4 CSV data files and 2 tracker files to: {outdir}/")
+    print(f"Successfully saved 4 CSV files to: {outdir}/")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="LOPO dataset splitter for the MGM pipeline.")
+    parser = argparse.ArgumentParser(description="Dual-Mode dataset splitter for the MGM pipeline.")
     
-    parser.add_argument("-i", "--otu_table", required=True, help="Path to the collapsed MGM OTU table.")
-    parser.add_argument("-l", "--labels", required=True, help="Path to the true labels CSV.")
-    parser.add_argument("-m", "--metadata", required=True, help="Path to metadata TSV/CSV containing sample_id and study_id.")
-    parser.add_argument("-o", "--outdir", required=True, help="Directory to save the split datasets.")
-    parser.add_argument("--train_txt", required=True, help="Text file containing train projects separated by space")
-    parser.add_argument("--test_txt", required=True, help="Text file containing test projects separated by space")
+    parser.add_argument("--mode", required=True, help="'loco' or 'random'")
+    parser.add_argument("-i", "--otu_table", required=True, help="Path to collapsed MGM OTU table.")
+    parser.add_argument("-l", "--labels", required=True, help="Path to labels.csv")
+    parser.add_argument("-o", "--outdir", required=True, help="Output directory")
+    parser.add_argument("--train_txt", required=True, help="Train IDs text file")
+    parser.add_argument("--test_txt", required=True, help="Test IDs text file")
     
     args = parser.parse_args()
     
-    lopo_split_dataset(
+    dual_mode_split_mgm(
+        mode=args.mode,
         otu_table_path=args.otu_table, 
         labels_path=args.labels, 
-        metadata_path=args.metadata,
         outdir=args.outdir, 
-        train_txt=args.train_txt,
+        train_txt=args.train_txt, 
         test_txt=args.test_txt
     )
