@@ -9,6 +9,24 @@
 #SBATCH --output=slurm_logs/global_ae_%j.log
 #SBATCH --error=slurm_logs/global_ae_%j.err
 
+# =============================================================================
+# Script: global_deepmicro.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Prepares the global abundance matrix, trains the DeepMicro autoencoder on
+#     the configured GPU node, and restores sample names on its embedding output.
+#
+# Inputs:
+#     raw_global_otu_dedup.tsv under PIPELINE_INPUT_DIR (default: ../data/input).
+#     Initialized DeepMicro source at ./DeepMicro/ and the mikropml/deep_env
+#     Conda environments.
+#
+# Outputs:
+#     DeepMicro/data/global_input_otu.csv and global_input_samples.txt.
+#     DeepMicro/results/AE[20]_global_input_otu_rep.csv and Slurm logs.
+# =============================================================================
+
 set -eo pipefail
 INPUT_DIR="${PIPELINE_INPUT_DIR:-../data/input}"
 

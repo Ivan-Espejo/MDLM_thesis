@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
-Script: 03-cohort_presence.py
+"""=============================================================================
+Script: 04-fold_comparison.py
+Author: Ivan Espejo
+
 Description:
-    Analyzes the influence of a dominant/target cohort on cross-cohort (LOCO)
-    generalization. Generates a two-tone cross-cohort stability boxplot and 
-    a mixed density plot of the highest and lowest ROC performance folds.
-=============================================================================
-"""
+    Tests how the selected cohort's assignment to train or test relates to LOCO
+    performance and compares prediction-score distributions for two chosen folds.
+
+Inputs:
+    --benchmark_root_dir and --split_data_dir: LOCO metrics and project splits.
+    --best_fold_dir, --worst_fold_dir, and --labels_path: fold predictions and
+    true labels; --cohort_of_interest and --metric select the comparison.
+
+Outputs:
+    Cohort-presence plot, best/worst-fold density plot, and summary table under
+    --global_out_dir.
+============================================================================="""
 
 import os
 import glob

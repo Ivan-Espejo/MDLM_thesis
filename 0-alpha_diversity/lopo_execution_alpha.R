@@ -1,13 +1,24 @@
 #!/usr/bin/env Rscript
 
 # =============================================================================
-# Alpha Diversity Classification Pipeline (Dual-Mode)
-# =============================================================================
+# Script: lopo_execution_alpha.R
+# Author: Ivan Espejo
+#
 # Description:
-# Calculates Alpha Diversity (Richness and Effective Shannon) directly from 
-# the global OTU table. Subsets the data based on Python-generated splits 
-# (LOCO or Random) and utilizes mikropml to classify disease state solely 
-# from these two ecological metrics.
+#     Calculates richness and effective Shannon diversity from the global OTU
+#     table, subsets samples using the supplied split IDs, and trains a
+#     mikropml classifier using only those two diversity metrics.
+#
+# Inputs:
+#     --mode: loco or random.
+#     --train_file and --test_file: files listing study IDs or sample IDs.
+#     --otu: global abundance table in TSV format.
+#     --labels: sample labels CSV; LOCO mode also requires study_id.
+#     --output_dir: destination for this run's results.
+#
+# Outputs:
+#     Alpha Diversity model predictions, performance metrics, and plots under
+#     --output_dir.
 # =============================================================================
 
 # 0. Package loading

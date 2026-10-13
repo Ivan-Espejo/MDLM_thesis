@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+"""=============================================================================
+Script: 05-learning_curve.py
+Author: Ivan Espejo
+
+Description:
+    Collects per-run benchmark metrics from random-mode results and plots model
+    performance against the corresponding training-set size.
+
+Inputs:
+    --benchmark_root_dir: directory containing per-run benchmark metrics.
+    --global_out_dir: destination for learning-curve figures.
+
+Outputs:
+    learning_curve_<metric>.png plots under --global_out_dir.
+============================================================================="""
+
 import os
 import glob
 import argparse

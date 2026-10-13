@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
+"""=============================================================================
 Script: 01-generate_loco_split.py
+Author: Ivan Espejo
+
 Description:
-    Exhaustively searches all possible combinations of independent projects 
-    to find validation splits that meet strict size and class-balance criteria.
-    Outputs the exact projects for training/testing along with a detailed 
-    information file for every valid permutation.
-=============================================================================
-"""
+    Searches study-level combinations that satisfy the configured test-size and
+    training-class-balance constraints, then selects and records valid LOCO
+    train/test folds.
+
+Inputs:
+    --labels: CSV containing Sample_Name, Label, and study_id.
+    --outdir: directory in which to create run folders.
+    --runs: optional maximum number of valid folds to write.
+
+Outputs:
+    run*/train_projects.txt, test_projects.txt, and run*_info.txt under --outdir.
+============================================================================="""
 import pandas as pd
 import argparse
 import os

@@ -10,6 +10,24 @@
 #SBATCH --output=slurm_logs/mdlm_%j.out
 #SBATCH --error=slurm_logs/mdlm_%j.err
 
+# =============================================================================
+# Script: mdlm_finetune.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Slurm job for one MDLM split. Creates train/test arrays, fine-tunes the
+#     discriminator from the shared ensemble checkpoint, runs held-out
+#     prediction and attribution, and copies predictions into the run results.
+#
+# Inputs:
+#     Positional arguments: train-ID file, test-ID file, run name, and mode.
+#     Global MDLM arrays, labels.csv, GloVe vocabulary, and ensemble checkpoint.
+#
+# Outputs:
+#     ../output/<mode>/results/<run>/mdlm/: predictions and logs.
+#     slurm_logs/: Slurm standard output and error logs.
+# =============================================================================
+
 START_TIME=$(date +%s)
 
 # ---------------------------------------------------------

@@ -9,6 +9,24 @@
 #SBATCH --output=slurm_logs/mgm_%j.out
 #SBATCH --error=slurm_logs/mgm_%j.err
 
+# =============================================================================
+# Script: mgm_sbatch.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Slurm job for one MGM fold. Slices the global MGM-ready table, constructs
+#     train/test corpora, fine-tunes MGM, predicts held-out samples, and invokes
+#     the MGM results script.
+#
+# Inputs:
+#     Positional arguments: train-ID file, test-ID file, run name, and mode.
+#     Global MGM-ready abundances and labels.csv under the pipeline directories.
+#
+# Outputs:
+#     ../output/<mode>/results/<run>/mgm/: prediction CSVs and figures.
+#     Per-run temporary split/model files and Slurm logs.
+# =============================================================================
+
 START_TIME=$(date +%s)
 
 # ---------------------------------------------------------

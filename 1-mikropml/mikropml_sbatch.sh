@@ -9,6 +9,24 @@
 #SBATCH --output=output/slurm_outputs/mikropml_%j.log
 #SBATCH --error=output/slurm_outputs/mikropml_%j.err
 
+# =============================================================================
+# Script: mikropml_sbatch.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Slurm wrapper for one mikropml OTU-classification fold. Activates the R
+#     environment and passes the selected split lists and global inputs to
+#     lopo_execution.R.
+#
+# Inputs:
+#     Positional arguments: train-ID file, test-ID file, run name, and mode.
+#     Global OTU table and labels.csv under PIPELINE_INPUT_DIR (default: ../data/input).
+#
+# Outputs:
+#     ../output/<mode>/results/<run>/mikropml/: predictions, metrics, and plots.
+#     output/slurm_outputs/: Slurm standard output and error logs.
+# =============================================================================
+
 echo "=== Job Started at $(date) ==="
 echo "Allocated Node: $SLURM_NODELIST"
 

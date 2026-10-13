@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
-Script: 02.5-benchmarking_stability.py
+"""=============================================================================
+Script: 03-benchmarking_stability.py
+Author: Ivan Espejo
+
 Description:
-    Aggregates benchmarking_metrics_*.csv from every run, calculates 
-    cross-cohort stability box plots, and runs statistical significance tests 
-    (including MCC and Balanced Accuracy). Adapted for Dual-Mode (LOCO/Random).
-=============================================================================
-"""
+    Combines per-run benchmark metrics, summarizes performance variability, and
+    performs statistical comparisons across models for LOCO or random runs.
+
+Inputs:
+    --mode: loco or random.
+    --benchmark_dir: directory containing per-run benchmark folders.
+    --outdir: destination for aggregate tables and plots.
+
+Outputs:
+    Statistical report, stability plots, and aggregate metrics under --outdir.
+============================================================================="""
 
 import argparse
 import glob
@@ -285,7 +292,7 @@ def generate_global_stability_plots(benchmark_root_dir, global_out_dir, mode):
         plt.xlabel(x_label_str, fontsize=14, fontweight='bold')
         plt.ylabel('', fontsize=14)
         plt.grid(True, axis='x', linestyle='--', alpha=0.7)
-        
+
         ax.yaxis.tick_right()
         plt.yticks(fontsize=12, fontweight='bold')
         

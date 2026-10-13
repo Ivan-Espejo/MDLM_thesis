@@ -1,38 +1,20 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
-Script: 01-generate_learning_curve_splits.py
+"""=============================================================================
+Script: 01-generate_random_split.py
 Author: Microbiome Analytics Pipeline
 
-=============================================================================
-EXPLANATION & METHODOLOGY:
------------------------------------------------------------------------------
-1. PURPOSE:
-   This script automates the creation of stratified learning curve splits 
-   (10% to 90% training data) to evaluate model efficiency and performance scaling.
+Description:
+     Creates deterministic, stratified train/test sample splits at increasing
+     training fractions for random-mode learning-curve analysis.
 
-2. RATIONALE:
-   A standard 80/20 train/test split only provides a snapshot of performance. 
-   By training models iteratively on increasingly larger subsets of the data 
-   (e.g., 10%, 20%, ..., 90%), we can generate a "Learning Curve." This reveals 
-   whether a model has plateaued (cannot learn more from additional data) or 
-   if its trajectory suggests that more samples would yield significant improvements.
-   
-3. STRATIFICATION:
-   Microbiome disease datasets (like IBD vs. Healthy) are often highly imbalanced.
-   This script uses `stratify=df['Label']` to guarantee that every subset, 
-   even the smallest 10% split, maintains the exact same ratio of Healthy to 
-   IBD samples as the global dataset.
+Inputs:
+     --labels: CSV containing Sample_Name and binary Label columns.
+     --outdir: directory in which to create run folders.
+     The random_state is fixed at 42 in the split function.
 
-4. WORKFLOW:
-   a. Reads the master binary labels CSV.
-   b. Iterates through training sizes [0.1, 0.2, ... 0.9].
-   c. Generates corresponding run directories (`run10/`, `run20/`, etc.).
-   d. Performs a stratified random split based on the target percentage.
-   e. Saves `train_samples.txt`, `test_samples.txt`, and a detailed 
-      `runXX_info.txt` diagnostics log for each subset.
-=============================================================================
-"""
+Outputs:
+     run*/train_samples.txt, test_samples.txt, and run*_info.txt under --outdir.
+============================================================================="""
 import os
 import argparse
 import pandas as pd

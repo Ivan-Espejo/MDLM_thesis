@@ -1,7 +1,29 @@
 # MDLM Thesis Repository
 
+```text
+          __  ___ ____   __    __  ___          ______          __
+         /  |/  // __ \ / /   /  |/  / ___     /_  __/__  ___  / /_  ___
+        / /|_/ // /_/ // /__ / /|_/ / |_-<      / / / -_ |_-< / __/ |_-<
+      /_/ /_//_____//____//_/  /_/____/      /_/  \__/____/ \__/  ___/
+
+Cross-cohort prediction of inflammatory bowel disease using microbiome embeddings
+```
+
+## Research Context
+
+Inflammatory bowel disease (IBD), including Crohn's disease and ulcerative
+colitis, is a chronic condition for which the gut microbiome may provide useful
+predictive signals. However, cohorts differ in geography and laboratory
+methods, so random train/test splits can make models appear more generalizable
+than they are. This project harmonizes 1,175 samples from 14 cohorts and
+compares classical classifiers, autoencoder embeddings, and transformer-based
+models using leave-one-cohort-out validation. The central objective is to test
+whether learned microbiome representations improve prediction in populations
+not seen during training; random splits provide a complementary learning-curve
+benchmark.
+
 This repository contains the data transformation, model training, benchmarking,
-and stability-analysis workflows used in the MDLM thesis project.
+and stability-analysis workflows for that experiment.
 
 ## Layout
 
@@ -27,7 +49,10 @@ git submodule update --init --recursive
 ```
 
 Restore the external data bundle under this repository's `data/` directory
-before running either master script.
+before running either master script. The privately shared bundle is available
+from the [Google Drive data folder](https://drive.google.com/drive/folders/1MGJQrpwkntn_UFIeT3QpcxHz8qf8wiA3?usp=sharing).
+Access is controlled by the Drive sharing permissions. Keep the folder structure
+intact when downloading it.
 
 The main inputs are `data/input/`; shared references and model assets are in
 `data/references/` and `data/models/`. The master scripts also accept an

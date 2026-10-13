@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
+"""=============================================================================
 Script: 1-single_study.py
-Function: Compresses user ASV tables and FASTA sequences into QIIME2 
-          artifacts, performs taxonomy mapping against Greengenes2 and SILVA 
-          (using original SILVA hashes), and generates unified TSV outputs.
+Author: Ays (adapted by Ivan Espejo)
 
-Usage: 
-    python 1-single_study.py -p PRJNAXXX/ PRJNAYYY/ --table <table_name> --seqs <seqs_name> --outdir <dir>
+Description:
+    Processes each project's abundance table and FASTA independently. Imports
+    sequence/count data into QIIME 2, maps features to Greengenes2 and SILVA,
+    assigns unified feature IDs, and writes a project-level taxonomy table.
 
-Info: 
-- Bypasses MD5 hashing for SILVA hits to preserve native SILVA Target IDs.
-- Loops over multiple project directories sequentially.
-- Routes all temporary mapping files to nested `logs_<project>/` directories.
-- Automatically cleans up heavy .qza and .biom artifacts to save NFS space.
-- Final outputs: `<project_name>_unified_tax.tsv` for each project.
-=============================================================================
-"""
+Inputs:
+    --projects: one or more project directories.
+    --table and --seqs: input filenames within each project directory.
+    --outdir: destination for per-project results and logs.
+    Greengenes2 QIIME 2 references and SILVA 138.2 FASTA under data/references.
+    The SILVA taxonomy TSV is optional; without it, SILVA hits lack those
+    taxonomy annotations but sequence matching can still run.
+
+Outputs:
+    <project>_unified_tax.tsv for each processed project and logs_<project>/
+    diagnostics beneath --outdir. Temporary QIIME 2/BIOM files are cleaned up.
+============================================================================="""
 import os, sys, subprocess, hashlib, argparse
 import pandas as pd
 

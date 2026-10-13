@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
+"""=============================================================================
 Script: 02-benchmarking.py
+Author: Ivan Espejo
+
 Description:
-    A universal benchmarking script designed to evaluate and compare multiple 
-    machine learning models (MGM, MDLM, mikropml, DeepMicro, and Alpha) from a single 
-    standardized input directory. It dynamically scans nested subdirectories
-    to extract 'Predictions_*.csv' files, standardizing them to compute 
-    empirical metrics, MCC, and Balanced Accuracy.
-=============================================================================
-"""
+    Finds model prediction CSVs in one completed run, normalizes their formats,
+    and calculates classification metrics and diagnostic plots for each model.
+
+Inputs:
+    --input_dir: run-specific folder containing model prediction subfolders.
+    --labels: true-label CSV used when predictions do not contain labels.
+    --outdir: destination for benchmark results; --mode labels the run type.
+
+Outputs:
+    --outdir/metrics/benchmarking_metrics_*.csv and figures/*.png.
+============================================================================="""
 
 import os
 import glob

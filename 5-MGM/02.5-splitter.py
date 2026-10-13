@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
+"""=============================================================================
 Script: 02.5-splitter.py
 Author: Microbiome ML Master Pipeline
 
 Description:
-    Performs dual-mode slicing of the global collapsed MGM OTU table and 
-    labels. Isolates Train and Test subsets for MGM based on either 
-    'loco' (study_id) or 'random' (Sample_Name) definitions.
-=============================================================================
-"""
+    Selects MGM train/test abundance rows and labels from the globally collapsed
+    table using study-level LOCO IDs or sample-level random IDs.
+
+Inputs:
+    --otu_table: MGM-ready abundance CSV; --labels: master labels CSV.
+    --train_txt and --test_txt: split ID lists; --mode selects ID semantics.
+
+Outputs:
+    --outdir/finetune_abundances.csv, test_abundances.csv, and matching label
+    CSV files for the MGM training and prediction commands.
+============================================================================="""
 import pandas as pd
 import argparse
 import os

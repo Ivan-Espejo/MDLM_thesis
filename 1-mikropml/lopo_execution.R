@@ -1,12 +1,23 @@
 #!/usr/bin/env Rscript
 
 # =============================================================================
-# Dual-Mode OTU Classification Pipeline (via mikropml)
-# =============================================================================
+# Script: lopo_execution.R
+# Author: Ivan Espejo
+#
 # Description:
-# Adapted for both Leave-One-Project-Out (LOCO) and Random Learning Curve 
-# cross-validation. It dynamically aligns Train/Test features (filling missing 
-# OTUs with 0s) and processes them simultaneously without data leakage.
+#     Trains and evaluates mikropml OTU classifiers for either LOCO study-level
+#     splits or random sample-level splits. Aligns train/test feature columns by
+#     filling absent OTUs with zero before fitting each model.
+#
+# Inputs:
+#     --mode: loco or random.
+#     --train_file and --test_file: files listing study IDs or sample IDs.
+#     --otu: global abundance table in TSV format.
+#     --labels: CSV containing Sample_Name, Label, and study_id for LOCO.
+#     --output_dir: destination for this run's results.
+#
+# Outputs:
+#     Model predictions and evaluation metrics under --output_dir.
 # =============================================================================
 
 # 0. Package loading

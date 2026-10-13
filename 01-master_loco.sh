@@ -1,36 +1,33 @@
 #!/bin/bash
 # =============================================================================
 # Script: 01-master_loco.sh
-# Description: Global Master Orchestrator for Microbiome Machine Learning
-# =============================================================================
-# EXPLANATION & METHODOLOGY:
-# -----------------------------------------------------------------------------
-# 1. PURPOSE:
-#    This master bash script dictates the execution of the entire multi-model 
-#    microbiome pipeline (Alpha, mikropml, DeepMicro, MDLM, MGM). It manages 
-#    global data splitting, global preprocessing, and automated SLURM dispatch.
+# Author: Ivan Espejo
 #
-# 2. DUAL ARCHITECTURE MODES (--mode):
-#    A. LOCO Mode (Leave-One-Cohort-Out): [DEFAULT]
-#       Tests cross-cohort generalization. The pipeline holds out entire studies
-#       or geographical cohorts during training to strictly evaluate whether the
-#       model learns biological truth or merely technical batch effects.
+# Description:
+#     Validates the selected input bundle, generates reproducible LOCO or random
+#     splits, runs shared preprocessing for selected models, and submits the
+#     per-split training jobs to Slurm. LOCO holds out entire studies; random
+#     mode creates stratified training-size splits for learning-curve analysis.
 #
-#    B. RANDOM Mode (Learning Curve Efficiency):
-#       Tests data efficiency. Rather than cross-cohort validation, it performs 
-#       stratified random splits incrementally (10%, 20%... 90% training data)
-#       to generate learning curves and assess performance saturation.
+# Inputs:
+#     --mode loco|random: Split strategy (default: loco).
+#     --models MODEL...: Models to run (default: all supported models).
+#     --runs N: Maximum LOCO folds to generate (default: 10).
+#     --input-dir DIR: Directory containing labels.csv, raw_global_otu_dedup.tsv,
+#         and merged_seqs.fasta (default: data/input/).
+#     --validate-only: Validate the bundle and exit without creating outputs.
+#     Shared model references under data/references/ and data/models/ as required
+#     by the selected models.
 #
-# 3. GLOBAL PREPROCESSING:
-#    To prevent redundant computation across 10+ folds, deep learning models 
-#    (MDLM & MGM) perform their heavy lifting (e.g., FASTA extraction, 
-#    BLAST alignments, GloVe embedding generation) once globally before 
-#    dispatching parallel training jobs on the compute cluster.
+# Outputs:
+#     output/<mode>/split_data_<mode>/: split files and provenance markers.
+#     output/preprocessing/: shared model-specific preprocessed inputs.
+#     Slurm jobs and per-model outputs under output/<mode>/results/.
 #
-# 4. USAGE EXAMPLES:
-#    - Standard LOCO (All models):  bash 01-master_loco.sh --mode loco --runs 10
-#    - Specific Models:              bash 01-master_loco.sh --mode loco --models MDLM MGM
-#    - Learning Curves:              bash 01-master_loco.sh --mode random --models MIKROPML
+# Usage:
+#     bash 01-master_loco.sh --mode loco --runs 10
+#     bash 01-master_loco.sh --mode loco --models MDLM MGM
+#     bash 01-master_loco.sh --mode random --models MIKROPML
 # =============================================================================
 
 set -eo pipefail
@@ -46,14 +43,14 @@ submit_job() {
 # Helper Function: Print Usage
 # ---------------------------------------------------------
 print_intro() {
-    echo "============================================================================="
+    echo '============================================================================='
     echo '      __  ___ ____   __    __  ___          ______          __            '
     echo '     /  |/  // __ \ / /   /  |/  / ___     /_  __/__  ___  / /_  ___      '
     echo '    / /|_/ // /_/ // /__ / /|_/ / |_-<      / / / -_ |_-< / __/ |_-<      '
     echo '   /_/  /_//_____//____//_/  /_/____/      /_/  \__/____/ \__/____/       '
-    echo "                                                                          "
-    echo "                    Microbiome ML Master Pipeline                       "
-    echo "============================================================================="
+    echo '                                                                          '
+    echo '                    Microbiome ML Master Pipeline                         '
+    echo '============================================================================='
 }
 
 print_usage() {

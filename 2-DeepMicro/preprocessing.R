@@ -1,5 +1,21 @@
 #!/usr/bin/env Rscript
 
+# =============================================================================
+# Script: preprocessing.R
+# Author: Ivan Espejo
+#
+# Description:
+#     Converts the global OTU TSV into a total-sum-scaled sample-by-feature CSV
+#     for DeepMicro and records the sample order in a sidecar text file.
+#
+# Inputs:
+#     --input_otu: global OTU table in TSV format.
+#     --output: destination for the numeric CSV matrix.
+#
+# Outputs:
+#     The CSV matrix at --output and global_input_samples.txt beside it.
+# =============================================================================
+
 library(readr)
 library(dplyr)
 library(tidyr)

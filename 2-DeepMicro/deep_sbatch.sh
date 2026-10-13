@@ -9,6 +9,25 @@
 #SBATCH --output=slurm_logs/dm_%j.log
 #SBATCH --error=slurm_logs/dm_%j.err
 
+# =============================================================================
+# Script: deep_sbatch.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Slurm wrapper for one DeepMicro embedding-classification fold. Uses the
+#     globally generated autoencoder embeddings and delegates classification to
+#     deep_mikropml.R.
+#
+# Inputs:
+#     Positional arguments: train-ID file, test-ID file, run name, and mode.
+#     DeepMicro/results/AE[20]_global_input_otu_rep.csv and labels.csv under
+#     PIPELINE_INPUT_DIR (default: ../data/input).
+#
+# Outputs:
+#     ../output/<mode>/results/<run>/deepmicro/: predictions and metrics.
+#     slurm_logs/: Slurm standard output and error logs.
+# =============================================================================
+
 mkdir -p slurm_logs
 
 # ==============================================================================

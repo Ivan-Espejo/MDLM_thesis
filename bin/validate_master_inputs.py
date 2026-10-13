@@ -1,5 +1,20 @@
 #!/usr/bin/env python3
-"""Validate the shared inputs consumed by the master workflows."""
+"""=============================================================================
+Script: validate_master_inputs.py
+Author: Ivan Espejo
+
+Description:
+    Checks that a master-workflow input bundle has valid labels, numeric OTU
+    abundances, and feature IDs that match records in the sequence FASTA.
+
+Inputs:
+    --input-dir: directory containing labels.csv, raw_global_otu_dedup.tsv, and
+    merged_seqs.fasta; --mode: loco or random validation rules.
+
+Outputs:
+    Prints validated sample, OTU, and FASTA-match counts; exits with an error
+    when required files or relationships are invalid.
+============================================================================="""
 
 import argparse
 import csv

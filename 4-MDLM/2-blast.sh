@@ -1,18 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# Script: 4-blast.sh
+# Script: 2-blast.sh
 # Author: Ivan Espejo
-# Function: Aligns extracted V4 sequences against the GloVe embedding database 
-#           to map pipeline taxa to the Transformer's expected vocabulary.
 #
-# Usage: 
-#     ./4-blast.sh [query_fasta] [embed_fasta]
+# Description:
+#     Builds or reuses a BLAST database from the MDLM embedding FASTA and maps
+#     extracted V4 sequences to that reference vocabulary.
 #
-# Info: 
-# - Requires NCBI BLAST+ suite (makeblastdb, blastn).
-# - Enforces strict alignment (98.5% identity, 100% coverage).
-# - Resolves multiple hits by extracting only the highest-scoring best hit.
-# - Automatically logs dropped unaligned taxa and cleans up temp database files.
+# Inputs:
+#     Positional arguments: query V4 FASTA and reference embedding FASTA.
+#     Defaults point to the generated global V4 FASTA and shared GloVe reference.
+#
+# Outputs:
+#     output/preprocessing/tmp/best_hits.tsv for the NumPy-generation step.
+#     BLAST database files beside the reference FASTA when first built.
 # =============================================================================
 
 source /opt/mambaforge/etc/profile.d/conda.sh

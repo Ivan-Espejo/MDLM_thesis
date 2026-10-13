@@ -1,30 +1,21 @@
-"""
-=============================================================================
-Attribution Calculations Pipeline for MDLM
-=============================================================================
-This script performs inference and leave-one-out feature attribution using a 
-pre-trained ELECTRA ensemble model tailored for microbiome sequence data.
+"""=============================================================================
+Script: 4-Attribution_calculations.py
+Author: Ivan Espejo
 
-Workflow:
-1. Data Loading: Ingests rank-ordered, TSS-normalized microbial sequences 
-   and corresponding binary disease labels as npy arrays.
-2. Model Reconstruction: Dynamically rebuilds a 10-model ELECTRA discriminator 
-   ensemble from saved PyTorch binary weights.
-3. Base Inference: Generates probability scores (Healthy vs. IBD) for all 
-   samples in the custom dataset.
-4. Evaluation: Calculates aggregate Accuracy, AUROC, and the Confusion Matrix, 
-   exporting a per-sample prediction CSV.
-5. Leave-One-Out Attribution: For highly confident predictions (top and bottom 
-   25%), the script iteratively masks each microbe in the sample's sequence to 
-   calculate how much that specific microbe contributed to the final prediction.
+Description:
+     Loads a fine-tuned MDLM discriminator ensemble, predicts labels for held-out
+     samples, and calculates feature attributions by masking sequence positions.
 
-Usage Example:
-    python Attribution_calculations.py \
-        --data_path output/preprocessing/512_embed_otu.npy \
-        --label_path output/preprocessing/label.npy \
-        --output_dir custom_results/
-=============================================================================
-"""
+Inputs:
+     --data_path and --label_path: held-out feature and label NumPy arrays.
+     --sample_names_path: text file containing held-out sample IDs.
+     --vocab_path: GloVe vocabulary embeddings; --models_path: model weights.
+     --seq_length: sequence width used for attribution.
+
+Outputs:
+     --output_dir/sample_predictions.csv and evaluation_metrics.txt, plus
+     attribution tables/plots produced by the selected inference workflow.
+============================================================================="""
 
 import sys
 import os

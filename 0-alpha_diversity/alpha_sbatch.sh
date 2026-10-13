@@ -9,6 +9,25 @@
 #SBATCH --output=slurm_logs/alpha_%j.log
 #SBATCH --error=slurm_logs/alpha_%j.err
 
+# =============================================================================
+# Script: alpha_sbatch.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Slurm wrapper for one Alpha Diversity training fold. Activates the
+#     mikropml environment and runs the R classifier on the supplied train/test
+#     split IDs.
+#
+# Inputs:
+#     Positional arguments: train-ID file, test-ID file, run name, and mode.
+#     ../data/input/raw_global_otu_dedup.tsv and labels.csv, unless overridden
+#     through PIPELINE_INPUT_DIR.
+#
+# Outputs:
+#     ../output/<mode>/results/<run>/alpha/: predictions, metrics, and plots.
+#     slurm_logs/: Slurm standard output and error logs.
+# =============================================================================
+
 echo "=== Job Started at $(date) ==="
 echo "Allocated Node: $SLURMD_NODENAME"
 

@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
+"""=============================================================================
 Script: 3.5-splitter.py
 Author: Microbiome ML Master Pipeline
 
 Description:
-    Performs dual-mode slicing of global preprocessed MDLM numpy arrays.
-    It maps the row-ordered `.npy` arrays against the master `labels.csv` to 
-    isolate Train/Test sets based on either 'loco' (projects) or 
-    'random' (samples) definitions.
-=============================================================================
-"""
+    Maps preprocessed MDLM arrays to the master sample labels and selects the
+    train/test rows listed by the LOCO study split or random sample split.
+
+Inputs:
+    --data and --labels: global feature and label NumPy arrays.
+    --labels_csv: sample names and study IDs used to align array rows.
+    --train_txt and --test_txt: split ID lists; --mode selects ID semantics.
+
+Outputs:
+    --outdir/finetune_samples.npy and finetune_labels.npy.
+    --outdir/test_samples.npy, test_labels.npy, and test_sample_names.txt.
+============================================================================="""
 import numpy as np
 import pandas as pd
 import argparse

@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
-Script: 5-generate_512_npys.py
+"""=============================================================================
+Script: 3-generate_npys.py
 Author: Ivan Espejo
-Function: Filters ASV tables via BLAST hits, collapses taxa to Pope et al. 
-          embedding IDs, applies TSS, and generates the final padded 3D 
-          Numpy arrays (features) and 1D label arrays for the MDLM model.
 
-Usage: 
-    python 5-generate_512_npys.py [options]
+Description:
+    Joins the V4 OTU table to BLAST hits and GloVe IDs, normalizes and pads
+    feature arrays for MDLM, and aligns labels to the retained samples.
 
-Info: 
-- Drops taxa without a valid BLAST hit (Out-of-Vocabulary filtering).
-- Applies strict Total Sum Scaling (TSS = 1.0).
-- Truncates and pads sequences with 0.0 to exactly 512 sequence length.
-- Extracts binary labels directly mapped to the output.
-- Generates a mapping CSV linking Embeddings -> Tags -> Taxonomy -> Sequence.
-=============================================================================
-"""
+Inputs:
+    --asv: V4 OTU TSV; --blast: best-hit TSV from 2-blast.sh.
+    --labels: global labels CSV; --fasta: V4 sequence FASTA.
+    --seq_len and --tss: maximum feature length and normalization total.
+
+Outputs:
+    --out_npy: padded feature array; --out_lbl: matching label array.
+    --out_tsv: filtered embedding abundance table.
+    --out_map: sequence-to-embedding mapping CSV.
+============================================================================="""
 
 
 import argparse, sys, os

@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-"""Build a small, balanced input bundle for exercising the master workflows."""
+"""=============================================================================
+Script: build_master_sample.py
+Author: Ivan Espejo
+
+Description:
+    Builds a small, balanced, sequence-backed fixture from the full global
+    inputs for testing master-script input wiring and split generation.
+
+Inputs:
+    --source-dir: directory containing labels.csv, the global OTU TSV, and FASTA.
+    --samples-per-class and --features: fixture size controls.
+
+Outputs:
+    --output-dir/labels.csv, raw_global_otu_dedup.tsv, and merged_seqs.fasta.
+============================================================================="""
 
 import argparse
 import csv

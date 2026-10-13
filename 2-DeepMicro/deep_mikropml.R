@@ -1,12 +1,22 @@
 #!/usr/bin/env Rscript
 
 # =============================================================================
-# LOPO DeepMicro Embeddings Classification Pipeline (via mikropml)
-# =============================================================================
+# Script: deep_mikropml.R
+# Author: Ivan Espejo
+#
 # Description:
-# This script takes the low-dimensional latent representations (embeddings) 
-# generated globally by DeepMicro and performs strict dual-mode 
-# classification (LOCO or Random).
+#     Trains and evaluates mikropml classifiers using the global DeepMicro
+#     embeddings for LOCO study-level or random sample-level splits.
+#
+# Inputs:
+#     --mode: loco or random.
+#     --embeddings: DeepMicro sample-by-feature embedding CSV.
+#     --train_file and --test_file: files listing study IDs or sample IDs.
+#     --labels: CSV containing Sample_Name, Label, and study_id for LOCO.
+#     --output_dir: destination for this run's results.
+#
+# Outputs:
+#     Predictions and model evaluation results under --output_dir.
 # =============================================================================
 
 # Setup

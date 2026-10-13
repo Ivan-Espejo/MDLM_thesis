@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
-Script: analyze_metadata.py
+"""=============================================================================
+Script: 3-analysis_meta.py
 Author: Ivan Espejo
-Function: Parses and summarizes clinical microbiome metadata, extracting 
-          project-level statistics including sample counts, diagnoses 
-          (Segregated by UC vs CD), demographics, and sequencing tech.
 
-Usage: 
-    python analyze_metadata.py --meta <metadata.tsv> [options]
+Description:
+    Parses clinical metadata, groups records by study, and summarizes diagnoses,
+    sample counts, sequencing regions/technology, geography, and demographics.
 
-Info: 
-- Extracts nested JSON properties from 'additional_metadata'.
-- Groups data by 'study_id'.
-- Segregates IBD into specific Ulcerative Colitis (UC) and Crohn's (CD) counts.
-=============================================================================
-"""
+Inputs:
+    --meta: clinical metadata TSV containing study/sample and diagnosis data.
+    --ibd and --non_ibd: optional diagnosis categories used for disease summaries.
+
+Outputs:
+    Prints project-level metadata summaries to standard output; this script does
+    not write pipeline input tables.
+============================================================================="""
 
 import argparse
 import os

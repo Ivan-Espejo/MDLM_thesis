@@ -1,9 +1,19 @@
 #!/bin/bash
 # =============================================================================
-# Script: 02-vsearch_silva.sh
+# Script: 01-blast.sh
 # Author: Ivan Espejo
-# Function: Aligns sequences globally against SILVA 132 via VSEARCH
-# Usage: ./02-vsearch_silva.sh [query_fasta] [silva_fasta]
+#
+# Description:
+#     Aligns each query sequence to SILVA 132 using VSEARCH, retains the best
+#     hit, and extracts its taxonomy from the reference FASTA header.
+#
+# Inputs:
+#     Positional arguments: query FASTA and SILVA 132 reference FASTA.
+#     Defaults use the MGM global query FASTA and data/references/silva_132/.
+#
+# Outputs:
+#     output/preprocessing/tmp/query_to_taxonomy.tsv for 02-mgm_otu_table.py.
+#     Temporary hit tables and dropped-sequence log in the same tmp folder.
 # =============================================================================
 
 source /opt/mambaforge/etc/profile.d/conda.sh

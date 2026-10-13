@@ -9,6 +9,35 @@
 #SBATCH --output=benchmark_%j.log
 #SBATCH --error=benchmark_%j.err
 
+# =============================================================================
+# Script: 02-master_benchmark.sh
+# Author: Ivan Espejo
+#
+# Description:
+#     Benchmarks completed model predictions, aggregates metrics across runs,
+#     and creates mode-specific statistical summaries and plots. LOCO mode also
+#     compares cohort presence between selected folds; random mode creates
+#     learning curves. Submit this script after the requested training jobs have
+#     completed.
+#
+# Inputs:
+#     --mode loco|random: Results mode to analyze (default: loco).
+#     --input-dir DIR: Directory containing labels.csv and the same inputs used
+#         to create the corresponding splits (default: data/input/).
+#     output/<mode>/results/: completed model predictions and metrics.
+#     output/<mode>/split_data_<mode>/: splits with matching input provenance.
+#
+# Outputs:
+#     output/<mode>/benchmark/: per-run benchmark tables and figures.
+#     output/<mode>/benchmark/global_stability/: aggregated statistics, plots,
+#         LOCO fold comparison, or random-mode learning curves.
+#     Slurm log file in the submission directory.
+#
+# Usage:
+#     sbatch 02-master_benchmark.sh --mode loco
+#     sbatch 02-master_benchmark.sh --mode random --input-dir data/sample_input
+# =============================================================================
+
 set -eo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"

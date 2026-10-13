@@ -1,29 +1,20 @@
 #!/usr/bin/env python3
-"""
-=============================================================================
+"""=============================================================================
 Script: 03-results.py
 Author: Ivan Espejo
 
 Description:
-    This script processes the raw logit scores outputted by the MGM model's 
-    predict function, merges them with the true biological labels, and evaluates 
-    the model's performance. 
+    Converts MGM prediction logits to class probabilities, joins them to the
+    true labels, calculates performance, and creates diagnostic plots.
 
-    It performs three critical tasks:
-    1. Softmax Transformation: Converts raw model logits into standardized 
-       probabilities (0 to 1) for both the Healthy and IBD classes.
-    2. Thresholding: Assigns a final prediction based on the highest probability.
-    3. Visualization: Generates publication-ready figures including a Confusion 
-       Matrix Heatmap, ROC Curve, and Precision-Recall Curve.
+Inputs:
+    --scores: y_score.csv from mgm predict.
+    --labels: held-out labels CSV.
+    --outdir: destination for plots and result files.
 
-Inputs (Default):
-    -s / --scores : output/y_score.csv (MGM raw output)
-    -l / --labels : ../data/input/labels.csv (True metadata)
-    
-Outputs (Default):
-    -o / --outdir : output/figures/ (Saves .png files)
-=============================================================================
-"""
+Outputs:
+    Confusion-matrix heatmap and ROC/precision-recall figures under --outdir.
+============================================================================="""
 
 import os
 import argparse
