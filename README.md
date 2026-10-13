@@ -1,14 +1,5 @@
 # MDLM Thesis Repository
 
-```text
-          __  ___ ____   __    __  ___          ______          __
-         /  |/  // __ \ / /   /  |/  / ___     /_  __/__  ___  / /_  ___
-        / /|_/ // /_/ // /__ / /|_/ / |_-<      / / / -_ |_-< / __/ |_-<
-      /_/ /_//_____//____//_/  /_/____/      /_/  \__/____/ \__/  ___/
-
-Cross-cohort prediction of inflammatory bowel disease using microbiome embeddings
-```
-
 ## Research Context
 
 Inflammatory bowel disease (IBD), including Crohn's disease and ulcerative
@@ -31,7 +22,6 @@ and stability-analysis workflows for that experiment.
 - `bin/`: creates LOCO or random splits and evaluates model results.
 - `0-alpha_diversity/`, `1-mikropml/`, `2-DeepMicro/`, `4-MDLM/`, and `5-MGM/`:
 	method-specific preprocessing and training pipelines.
-- `4-MDLM/microbiome_transformers/`: transformer implementation used by MDLM.
 - `data/`: external shared inputs, references, and model assets. See
 	`data/README.md` for the required bundle.
 - `output/`: generated splits, preprocessing results, model results, benchmarks,
@@ -69,52 +59,57 @@ conda env create -f data/environments/benchmark_env.yml
 The batch scripts expect the cluster's Conda installation at `/opt/mambaforge`
 and use the Slurm partitions, GPU types, and resource requests declared in their
 `#SBATCH` headers. Adjust those settings only when targeting a different HPC
-configuration. The `1-single_study_env` used for rebuilding per-study inputs is
-not exported in `data/environments/`; it is not needed when starting from the
-supplied global input files.
-
-## Main workflows
-
-Generate splits and run selected models:
-
-```bash
-bash 01-master_loco.sh --mode loco --runs 10
-bash 01-master_loco.sh --mode loco --models MDLM MGM
-bash 01-master_loco.sh --mode random --models MIKROPML
-```
-
-After model jobs finish, submit benchmarking and aggregation as a Slurm job:
-
-```bash
-sbatch 02-master_benchmark.sh --mode loco
-sbatch 02-master_benchmark.sh --mode random
-```
+configuration.
 
 ## Sample inputs
 
-Build a small fixture from the bundled global inputs, then run a CPU-only
-smoke workflow from the repository root:
+`data/sample_input/` is included in Git for a small smoke test. It contains 80
+samples from 8 balanced cohorts and 32 sequence-backed features. This approved
+fixture is real data for checking pipeline wiring; it is not large or
+representative enough for scientific performance conclusions.
 
-```bash
-python bin/build_master_sample.py
-bash 01-master_loco.sh --input-dir data/sample_input --mode loco --runs 10 --models MIKROPML
-sbatch 02-master_benchmark.sh --input-dir data/sample_input --mode loco
-```
+## Usage
 
-The fixture has 80 samples from 8 balanced cohorts and 32 sequence-backed
-features. It is intended to verify input wiring and orchestration, not to
-produce scientifically meaningful performance estimates. Run it in a clean
-workspace/output directory so its results are not mixed with full-data runs.
-Use `--validate-only` with either master to check the selected input directory
-without creating splits or submitting jobs. Existing split folders are reused
-only when their recorded input hash and split settings match; legacy folders
-without provenance must be removed before regenerating them.
+1. **Check the inputs.** From the repository root, validate the included sample
+	fixture or the full Drive bundle before submitting jobs:
 
-LOCO benchmarking also runs the cohort-presence analysis for `PRJNA1259137` and
-compares the configured best and worst folds (`run4` and `run10`). Random mode
-generates learning-curve outputs instead. `01-master_loco.sh` is an orchestrator
-run from the login node; it performs global preprocessing when requested and
-submits model jobs. `02-master_benchmark.sh` is submitted with `sbatch`.
+	```bash
+	bash 01-master_loco.sh --input-dir data/sample_input --mode loco --validate-only
+	bash 01-master_loco.sh --mode loco --validate-only
+	```
+
+2. **Generate splits and submit model jobs.** LOCO holds out complete cohorts;
+	random mode creates stratified sample splits for learning curves. Select
+	models with `--models`, or omit it to run all supported models:
+
+	```bash
+	bash 01-master_loco.sh --mode loco --runs 10 --models MDLM MGM
+	bash 01-master_loco.sh --mode random --models MIKROPML
+	```
+
+	For a wiring smoke test, use the included fixture and a CPU model:
+
+	```bash
+	bash 01-master_loco.sh --input-dir data/sample_input --mode loco --runs 10 --models MIKROPML
+	```
+
+3. **Wait for the Slurm training jobs to finish**, then submit benchmarking for
+	the same mode and input directory:
+
+	```bash
+	sbatch 02-master_benchmark.sh --mode loco
+	sbatch 02-master_benchmark.sh --input-dir data/sample_input --mode loco
+	```
+
+	Benchmarking writes per-run metrics and figures under
+	`output/<mode>/benchmark/`. LOCO also compares cohort presence and selected
+	folds; random mode generates learning curves.
+
+The master records input hashes with generated splits and rejects stale or
+unmarked split folders. If it reports a provenance mismatch, remove only the
+relevant generated directory (`output/loco/split_data_loco/` or
+`output/random/split_data_random/`) and rerun the training master with the
+intended input directory.
 
 ## Large files
 

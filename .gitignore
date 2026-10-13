@@ -38,3 +38,5 @@ tmp/
 # External reproducibility bundle; keep only its manifest in Git
 data/*
 !data/README.md
+!data/sample_input/
+!data/sample_input/*
