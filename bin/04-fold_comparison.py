@@ -4,9 +4,8 @@
 Script: 03-cohort_presence.py
 Description:
     Analyzes the influence of a dominant/target cohort on cross-cohort (LOCO)
-    generalization. It reads all per-run benchmark metric CSVs, identifies 
-    whether the target cohort was allocated to the TRAINING set or the TEST set 
-    for each fold, and generates a two-tone cross-cohort stability boxplot.
+    generalization. Generates a two-tone cross-cohort stability boxplot and 
+    a mixed density plot of the highest and lowest ROC performance folds.
 =============================================================================
 """
 
@@ -31,7 +30,7 @@ def generate_cohort_presence_roc_plot(
     color_in_test="#FFFFFF"      # White with black border
 ):
     os.makedirs(global_out_dir, exist_ok=True)
-    print(f"\n[1/4] Aggregating LOCO metric files from: {benchmark_root_dir}")
+    print(f"\n[1/5] Aggregating LOCO metric files from: {benchmark_root_dir}")
 
     # Search for all generated run metric CSVs (handles both naming conventions)
     search_pattern = os.path.join(benchmark_root_dir, "run*", "metrics", "*metrics*.csv")
@@ -86,7 +85,7 @@ def generate_cohort_presence_roc_plot(
     # ---------------------------------------------------------
     # 2. Determine Cohort Allocation (Train vs. Test)
     # ---------------------------------------------------------
-    print(f"[2/4] Mapping '{cohort_of_interest}' presence across fold splits...")
+    print(f"[2/5] Mapping '{cohort_of_interest}' presence across fold splits...")
 
     def cohort_in_training(run_name):
         train_path = os.path.join(split_data_dir, run_name, "train_projects.txt")
@@ -112,7 +111,7 @@ def generate_cohort_presence_roc_plot(
     # ---------------------------------------------------------
     # 3. Generate Comparative Boxplot
     # ---------------------------------------------------------
-    print(f"[3/4] Rendering Cohort-Presence Boxplot for {metric}...")
+    print(f"[3/5] Rendering Cohort-Presence Boxplot for {metric}...")
 
     box_palette = {
         'Baseline (Alpha-Div.)': '#969696',
@@ -125,7 +124,7 @@ def generate_cohort_presence_roc_plot(
     median_order = master_df.groupby('Model')[metric].median().sort_values(ascending=False).index
 
     ax = sns.boxplot(
-        data=master_df, x=metric, y='Model',
+        data=master_df, x=metric, y='Model', hue='Model', legend=False,
         order=median_order, palette=box_palette,
         showfliers=False, width=0.6, boxprops=dict(alpha=0.6, edgecolor='black')
     )
@@ -207,16 +206,125 @@ def generate_cohort_presence_roc_plot(
     # 4. Summary Table
     # ---------------------------------------------------------
     summary = master_df.groupby(['Model', 'PresenceLabel'])[metric].median().unstack()
-    print(f"\n[4/4] Median {metric} by Cohort Allocation:\n")
+    print(f"\n[4/5] Median {metric} by Cohort Allocation:\n")
     print(summary.round(4))
     
     summary_path = os.path.join(global_out_dir, f'median_{metric.lower()}_by_{cohort_of_interest}.csv')
     summary.round(4).to_csv(summary_path)
-    print(f"\nSummary table saved to: {summary_path}")
+    print(f"  [OK] Summary table saved to: {summary_path}")
+
+
+# ---------------------------------------------------------
+# Density Plot Extension 
+# ---------------------------------------------------------
+def empirical_threshold(y_prob, y_pred):
+    probs_as_0 = y_prob[y_pred == 0]
+    probs_as_1 = y_prob[y_pred == 1]
+    if len(probs_as_0) > 0 and len(probs_as_1) > 0:
+        return (probs_as_0.max() + probs_as_1.min()) / 2.0
+    return 0.5
+
+def load_fold_predictions(input_dir, labels_path):
+    data = {}
+    search_path = os.path.join(input_dir, '**', '*.csv')
+    csv_files = glob.glob(search_path, recursive=True)
+    
+    for f in csv_files:
+        filename = os.path.basename(f)
+        if "Predictions_" not in filename and filename != "y_score.csv":
+            continue
+            
+        model_name_raw = filename.replace("Predictions_", "").replace(".csv", "")
+        
+        rename_map = {'MIKROPML (RF)': 'mikropml (RF)', 'RF': 'mikropml (RF)', 'MDLM': 'MDLM', 'MGM': 'MGM', 'Y_SCORE': 'MGM'}
+        std_name = rename_map.get(model_name_raw.upper(), model_name_raw)
+
+        if std_name not in ["mikropml (RF)", "MGM", "MDLM"]:
+            continue
+            
+        try:
+            if std_name == "MGM":
+                # MGM requires softmax conversion and merging with true labels
+                scores_df = pd.read_csv(f, index_col=0)
+                scores_df.columns = scores_df.columns.astype(str)
+                labels_df = pd.read_csv(labels_path)
+                merged_df = labels_df.merge(scores_df, left_on=labels_df.columns[0], right_index=True, how='inner')
+                
+                logits = merged_df[['0', '1']].values
+                logits_stable = logits - np.max(logits, axis=1, keepdims=True)
+                probs = np.exp(logits_stable) / np.sum(np.exp(logits_stable), axis=1, keepdims=True)
+                
+                y_true = merged_df['Label'].values
+                y_prob = probs[:, 1]
+                y_pred = np.argmax(probs, axis=1)
+                
+            else:
+                # RF and MDLM use standard string mapping
+                df = pd.read_csv(f)
+                y_true = df['Actual'].map({'Healthy': 0, 'IBD': 1}).values if df['Actual'].dtype == object else df['Actual'].values
+                y_prob = df['IBD'].values
+                y_pred = df['Predicted'].map({'Healthy': 0, 'IBD': 1}).values if df['Predicted'].dtype == object else df['Predicted'].values
+
+            data[std_name] = {"y_true": y_true, "y_prob": y_prob, "y_pred": y_pred}
+            
+        except Exception as e:
+            print(f"  [WARN] Could not process {f}: {e}")
+            
+    return data
+    
+def plot_best_worst_density(best_dir, worst_dir, labels_path, global_out_dir):
+    print(f"\n[5/5] Rendering High/Low ROC Mixed Density Plot...")
+    folds = [
+        ("Highest ROC Fold", best_dir),
+        ("Lowest ROC Fold", worst_dir)
+    ]
+    target_models = ["mikropml (RF)", "MGM", "MDLM"]
+    
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(14, 8), sharex=True)
+
+    for r, (row_label, fold_dir) in enumerate(folds):
+        data = load_fold_predictions(fold_dir, labels_path)
+        for c, model in enumerate(target_models):
+            ax = axes[r][c]
+            if model not in data:
+                ax.set_visible(False)
+                continue
+                
+            d = data[model]
+            y_true, y_prob, y_pred = d['y_true'], d['y_prob'], d['y_pred']
+            thresh = empirical_threshold(y_prob, y_pred)
+
+            sns.kdeplot(y_prob[y_true == 1], fill=True, color='#D55E00', alpha=0.4,
+                        label='True IBD', ax=ax, bw_adjust=0.5, warn_singular=False)
+            sns.kdeplot(y_prob[y_true == 0], fill=True, color='#009E73', alpha=0.4,
+                        label='True Healthy', ax=ax, bw_adjust=0.5, warn_singular=False)
+            
+            ax.axvline(x=thresh, color='red', linestyle='--', linewidth=1.5, alpha=0.9)
+            ax.text(thresh + 0.02, ax.get_ylim()[1] * 0.75, f"Cutoff: {thresh:.2f}",
+                    color='red', fontweight='bold', fontsize=9)
+
+            ax.set_xlim([-0.05, 1.05])
+            ax.set_xticks([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+            ax.grid(True, linestyle=':', alpha=0.6)
+
+            if r == 0:
+                ax.set_title(model, fontsize=12, fontweight='bold')
+            ax.set_ylabel(f"{row_label}\nDensity" if c == 0 else "", fontsize=10)
+            ax.set_xlabel("Predicted Probability of IBD" if r == 1 else "", fontsize=10)
+            
+            if r == 0 and c == 0:
+                ax.legend(loc='upper right', fontsize=8)
+
+    plt.tight_layout()
+    os.makedirs(global_out_dir, exist_ok=True)
+    out_path = os.path.join(global_out_dir, "highest_lowest_roc_density.png")
+    fig.savefig(out_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print(f"  [OK] Saved: {out_path}")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Cohort Presence Impact Analysis for LOCO Cross-Validation.")
+    parser = argparse.ArgumentParser(description="Cohort Presence Impact Analysis & Fold Density Plot.")
     
     parser.add_argument("--benchmark_root_dir", default="output/loco/benchmark", 
                         help="Directory containing run*/metrics/ CSV files")
@@ -232,6 +340,14 @@ if __name__ == "__main__":
                         help="Dot color when the cohort is in training")
     parser.add_argument("--color_in_test", default="#FFFFFF", 
                         help="Dot color when the cohort is in testing")
+    
+    # New Arguments for Density Plot
+    parser.add_argument("--best_fold_dir", default="output/loco/results/run4", required=True, 
+                        help="Path to the highest ROC fold predictions directory")
+    parser.add_argument("--worst_fold_dir", default="output/loco/results/run10", required=True, 
+                        help="Path to the lowest ROC fold predictions directory")
+    parser.add_argument("--labels_path", default="data/input/labels.csv", 
+                        help="Path to global labels.csv")
 
     args = parser.parse_args()
 
@@ -243,4 +359,11 @@ if __name__ == "__main__":
         metric=args.metric,
         color_in_train=args.color_in_train,
         color_in_test=args.color_in_test
+    )
+
+    plot_best_worst_density(
+        best_dir=args.best_fold_dir,
+        worst_dir=args.worst_fold_dir,
+        labels_path=args.labels_path,
+        global_out_dir=args.global_out_dir
     )

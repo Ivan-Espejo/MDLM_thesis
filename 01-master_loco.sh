@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# Script: 01-master.sh
+# Script: 01-master_loco.sh
 # Description: Global Master Orchestrator for Microbiome Machine Learning
 # =============================================================================
 # EXPLANATION & METHODOLOGY:
@@ -28,10 +28,19 @@
 #    dispatching parallel training jobs on the compute cluster.
 #
 # 4. USAGE EXAMPLES:
-#    - Standard LOCO (All models):  bash 01-master.sh --mode loco --runs 10
-#    - Specific Models:              bash 01-master.sh --mode loco --models MDLM MGM
-#    - Learning Curves:              bash 01-master.sh --mode random --models MIKROPML
+#    - Standard LOCO (All models):  bash 01-master_loco.sh --mode loco --runs 10
+#    - Specific Models:              bash 01-master_loco.sh --mode loco --models MDLM MGM
+#    - Learning Curves:              bash 01-master_loco.sh --mode random --models MIKROPML
 # =============================================================================
+
+set -eo pipefail
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+INPUT_DIR="$SCRIPT_DIR/data/input"
+
+submit_job() {
+    sbatch --export=ALL,PIPELINE_INPUT_DIR="$INPUT_DIR" "$@"
+}
 
 # ---------------------------------------------------------
 # Helper Function: Print Usage
@@ -48,7 +57,7 @@ print_intro() {
 }
 
 print_usage() {
-    echo "Usage: bash 01-master.sh [OPTIONS]"
+    echo "Usage: bash 01-master_loco.sh [OPTIONS]"
     echo ""
     echo "Options:"
     echo "  -h, --help       Show this help message and exit."
@@ -56,12 +65,14 @@ print_usage() {
     echo "  --models, -mo    Space-separated list of models to execute."
     echo "                   Options: ALPHA MIKROPML DEEPMICRO MDLM MGM."
     echo "                   (Default: ALL models)."
+    echo "  --input-dir      Directory containing labels.csv, raw_global_otu_dedup.tsv, and merged_seqs.fasta."
+    echo "  --validate-only  Validate the inputs and exit without creating splits or submitting jobs."
     echo "  --runs, -r       Number of LOCO cross-validation folds to run (Default: 10)."
     echo ""
     echo "Examples:"
-    echo "  bash 01-master.sh --mode loco --runs 10"
-    echo "  bash 01-master.sh --mode loco --models MDLM MGM ALPHA"
-    echo "  bash 01-master.sh --mode random --models MIKROPML"
+    echo "  bash 01-master_loco.sh --mode loco --runs 10"
+    echo "  bash 01-master_loco.sh --mode loco --models MDLM MGM ALPHA"
+    echo "  bash 01-master_loco.sh --mode random --models MIKROPML"
     echo "============================================================================="
 }
 
@@ -69,6 +80,7 @@ print_usage() {
 MODE="loco"
 MODELS_TO_RUN=()
 LOCO_RUNS=10
+VALIDATE_ONLY=false
 
 print_intro
 
@@ -97,6 +109,18 @@ while [[ "$#" -gt 0 ]]; do
                 shift
             done
             ;;
+        --input-dir)
+            if [[ -z "${2:-}" || "$2" =~ ^- ]]; then
+                echo "ERROR: --input-dir requires a directory path." >&2
+                exit 1
+            fi
+            INPUT_DIR="$2"
+            shift 2
+            ;;
+        --validate-only)
+            VALIDATE_ONLY=true
+            shift
+            ;;
         --runs|-r)
             if [[ -z "$2" || "$2" =~ ^- ]]; then
                 echo "ERROR: --runs requires a numeric value."
@@ -113,11 +137,37 @@ while [[ "$#" -gt 0 ]]; do
     esac
 done
 
+if [[ "$INPUT_DIR" != /* ]]; then
+    INPUT_DIR="$SCRIPT_DIR/$INPUT_DIR"
+fi
+if [[ ! -d "$INPUT_DIR" ]]; then
+    echo "ERROR: Input directory not found: $INPUT_DIR" >&2
+    exit 1
+fi
+INPUT_DIR="$(cd "$INPUT_DIR" && pwd)"
+for required_file in labels.csv raw_global_otu_dedup.tsv merged_seqs.fasta; do
+    if [[ ! -s "$INPUT_DIR/$required_file" ]]; then
+        echo "ERROR: Required input file missing or empty: $INPUT_DIR/$required_file" >&2
+        exit 1
+    fi
+done
+
 # Validate Mode
 if [[ "${MODE}" != "loco" && "${MODE}" != "random" ]]; then
     echo "ERROR: Invalid mode specified. Use --mode loco or --mode random."
     exit 1
 fi
+if [[ ! "$LOCO_RUNS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "ERROR: --runs must be a positive integer." >&2
+    exit 1
+fi
+
+python3 bin/validate_master_inputs.py --input-dir "$INPUT_DIR" --mode "$MODE"
+if [[ "$VALIDATE_ONLY" == true ]]; then
+    echo "Input bundle is valid."
+    exit 0
+fi
+INPUTS_SIGNATURE="$(cd "$INPUT_DIR" && sha256sum labels.csv raw_global_otu_dedup.tsv merged_seqs.fasta | sha256sum | cut -d' ' -f1)"
 
 # Apply Defaults if no models provided
 if [ ${#MODELS_TO_RUN[@]} -eq 0 ]; then
@@ -147,8 +197,16 @@ echo "========================================="
 # ---------------------------------------------------------
 # We name the output directory based on the mode so they don't overwrite each other
 SPLIT_DIR="./output/${MODE}/split_data_${MODE}"
+SPLIT_INPUT_SIGNATURE="${SPLIT_DIR}/.input_signature"
+SPLIT_CONFIG_FILE="${SPLIT_DIR}/.split_config"
+SPLIT_CONFIG="${MODE}:${LOCO_RUNS}"
 
 if compgen -G "${SPLIT_DIR}/run*" > /dev/null; then
+    if [[ ! -f "$SPLIT_INPUT_SIGNATURE" || "$(<"$SPLIT_INPUT_SIGNATURE")" != "$INPUTS_SIGNATURE" || ! -f "$SPLIT_CONFIG_FILE" || "$(<"$SPLIT_CONFIG_FILE")" != "$SPLIT_CONFIG" ]]; then
+        echo "ERROR: Existing splits in ${SPLIT_DIR} do not match the selected inputs/configuration." >&2
+        echo "Remove that generated split directory before starting a new run." >&2
+        exit 1
+    fi
     echo "[Phase 1] Splits already exist in ${SPLIT_DIR}. Skipping generation..."
 else
     echo "[Phase 1] Generating ${MODE^^} split combinations..."
@@ -156,7 +214,7 @@ else
     
     if [ "${MODE}" == "loco" ]; then
         python3 bin/01-generate_loco_split.py \
-        -l ./data/input/labels.csv \
+        -l "$INPUT_DIR/labels.csv" \
         -o "${SPLIT_DIR}/" \
         -r "${LOCO_RUNS}"
         
@@ -164,10 +222,21 @@ else
         # This python script will generate run10 to run90, representing 
         # the 10%, 20%... 90% training splits for the learning curve.
         python3 bin/01-generate_random_split.py \
-        -l ./data/input/labels.csv \
+        -l "$INPUT_DIR/labels.csv" \
         -o "${SPLIT_DIR}/"
     fi
 fi
+
+# Stop instead of submitting a literal wildcard when the labels cannot form splits.
+shopt -s nullglob
+RUN_DIRS=("${SPLIT_DIR}"/run*/)
+shopt -u nullglob
+if [[ ${#RUN_DIRS[@]} -eq 0 ]]; then
+    echo "ERROR: No valid splits were created in ${SPLIT_DIR}." >&2
+    exit 1
+fi
+printf '%s\n' "$INPUTS_SIGNATURE" > "$SPLIT_INPUT_SIGNATURE"
+printf '%s\n' "$SPLIT_CONFIG" > "$SPLIT_CONFIG_FILE"
 
 # ---------------------------------------------------------
 # Phase 2A: Global MDLM Preprocessing
@@ -183,8 +252,8 @@ if run_model "MDLM"; then
         conda activate 2-merge_env
 
         python 1-generate_fasta.py \
-        --table ../data/input/raw_global_otu_dedup.tsv \
-        --fasta ../data/input/merged_seqs.fasta \
+        --table "$INPUT_DIR/raw_global_otu_dedup.tsv" \
+        --fasta "$INPUT_DIR/merged_seqs.fasta" \
         --out_fasta ../output/preprocessing/MDLM_Global/global_V4.fasta \
         --out_tsv ../output/preprocessing/MDLM_Global/global_V4_otu.tsv \
         --primer GTGYCAGCMGCCGCGGTAA
@@ -195,7 +264,7 @@ if run_model "MDLM"; then
         python 3-generate_npys.py \
         --asv ../output/preprocessing/MDLM_Global/global_V4_otu.tsv \
         --blast output/preprocessing/tmp/best_hits.tsv \
-        --labels ../data/input/labels.csv \
+        --labels "$INPUT_DIR/labels.csv" \
         --fasta ../output/preprocessing/MDLM_Global/global_V4.fasta \
         --out_npy ../output/preprocessing/MDLM_Global/512_embed_otu.npy \
         --out_lbl ../output/preprocessing/MDLM_Global/label.npy \
@@ -218,18 +287,18 @@ if run_model "MGM"; then
         echo "[Phase 2B] Executing Global MGM Preprocessing..."
         cd 5-MGM/
         mkdir -p output/preprocessing/MGM_Global/ output/preprocessing/tmp/
-        source ~/.bashrc
+        source /opt/mambaforge/etc/profile.d/conda.sh
         
         conda activate vsearch_env
-        cp ../data/input/merged_seqs.fasta output/preprocessing/MGM_Global/mgm_input.fasta
+        cp "$INPUT_DIR/merged_seqs.fasta" output/preprocessing/MGM_Global/mgm_input.fasta
 
         bash 01-blast.sh output/preprocessing/MGM_Global/mgm_input.fasta \
-        ../data/references/silva132/SILVA_132_SSURef_NR99_DNA.fasta
+        ../data/references/silva_132/SILVA_132_SSURef_NR99_DNA.fasta
         
         conda deactivate
         conda activate mgm_env
 
-        python3 02-mgm_otu_table.py -i ../data/input/raw_global_otu_dedup.tsv \
+        python3 02-mgm_otu_table.py -i "$INPUT_DIR/raw_global_otu_dedup.tsv" \
         -m output/preprocessing/tmp/query_to_taxonomy.tsv \
         -o output/preprocessing/MGM_Global/mgm_ready_abundances.csv \
         -l output/preprocessing/MGM_Global/pipeline_drops.log
@@ -246,13 +315,14 @@ fi
 DEEPMICRO_HALT_REQUIRED=false
 
 if run_model "DEEPMICRO"; then
-    if [ -f "./data/models/AE[20]_global_input_otu_rep.csv" ]; then
+    if [ -f "./2-DeepMicro/DeepMicro/results/AE[20]_global_input_otu_rep.csv" ]; then
         echo "[Phase 2C] DeepMicro Global Embeddings found. Proceeding..."
     else
         echo "[Phase 2C] Missing Global DeepMicro Embeddings."
         echo "Dispatching 'global_deepmicro.sh' to the GPU node..."
         cd 2-DeepMicro/
-        sbatch global_deepmicro.sh
+        mkdir -p slurm_logs
+        submit_job global_deepmicro.sh
         cd ..
         
         echo "======================================================="
@@ -270,8 +340,8 @@ fi
 # ---------------------------------------------------------
 echo "[Phase 3] Dispatching parallel model training jobs..."
 
-for run_path in ${SPLIT_DIR}/run*/ ; do
-    RUN_NAME=$(basename ${run_path})
+for run_path in "${RUN_DIRS[@]}"; do
+    RUN_NAME=$(basename "${run_path}")
     
     echo "-----------------------------------------"
     echo "Dispatching models for Split: ${RUN_NAME} (${MODE^^})"
@@ -288,13 +358,15 @@ for run_path in ${SPLIT_DIR}/run*/ ; do
     
     if run_model "ALPHA"; then
         cd 0-alpha_diversity/
-        sbatch alpha_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
+        mkdir -p slurm_logs
+        submit_job alpha_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
         cd ..
     fi
 
     if run_model "MIKROPML"; then
         cd 1-mikropml/
-        sbatch mikropml_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
+        mkdir -p output/slurm_outputs
+        submit_job mikropml_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
         cd ..
     fi
 
@@ -303,20 +375,23 @@ for run_path in ${SPLIT_DIR}/run*/ ; do
             echo "[SKIPPED] DeepMicro classification skipped (waiting on GPU embeddings)."
         else
             cd 2-DeepMicro/
-            sbatch deep_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
+            mkdir -p slurm_logs
+            submit_job deep_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
             cd ..
         fi
     fi
 
     if run_model "MDLM"; then
         cd 4-MDLM/
-        sbatch mdlm_finetune.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
+        mkdir -p slurm_logs
+        submit_job mdlm_finetune.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
         cd ..
     fi
 
     if run_model "MGM"; then
         cd 5-MGM/
-        sbatch mgm_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
+        mkdir -p slurm_logs
+        submit_job mgm_sbatch.sh "${TRAIN_FILE}" "${TEST_FILE}" "${RUN_NAME}" "${MODE}"
         cd ..
     fi
 done
@@ -326,7 +401,7 @@ if [ "$DEEPMICRO_HALT_REQUIRED" = true ]; then
     echo "Pipeline partially dispatched."
     echo "DeepMicro was paused. Once the global_ae job finishes,"
     echo "re-run the next script to also dispatch the DeepMicro classifiers:"
-    echo "bash 01-master.sh --mode ${MODE} --models DEEPMICRO"
+    echo "bash 01-master_loco.sh --mode ${MODE} --models DEEPMICRO"
 else
     echo "All requested ${MODE^^} folds successfully dispatched!"
 fi

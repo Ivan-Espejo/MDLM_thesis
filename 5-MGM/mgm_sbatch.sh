@@ -18,6 +18,7 @@ TRAIN_FILE=$1
 TEST_FILE=$2
 RUN_NAME=$3
 MODE=$4  # "loco" or "random"
+INPUT_DIR="${PIPELINE_INPUT_DIR:-../data/input}"
 
 echo "=== MGM Classifier Job Started | Mode: ${MODE^^} | Run: ${RUN_NAME} at $(date) ==="
 echo "Allocated Node: $SLURMD_NODENAME"
@@ -30,7 +31,7 @@ FINAL_DEST="../output/${MODE}/results/${RUN_NAME}/mgm/predictions"
 
 mkdir -p ${TMP_SPLIT_DIR} ${MODEL_OUT_DIR} ${PREDS_OUT_DIR} "${FINAL_DEST}"
 
-source ~/.bashrc
+source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate mgm_env
 
 # ---------------------------------------------------------
@@ -41,7 +42,7 @@ echo "Step 1: Slicing MGM OTU table into Train/Test subsets for ${RUN_NAME}..."
 python3 02.5-splitter.py \
     --mode "${MODE}" \
     -i output/preprocessing/MGM_Global/mgm_ready_abundances.csv \
-    -l ../data/input/labels.csv \
+    -l "${INPUT_DIR}/labels.csv" \
     --train_txt "${TRAIN_FILE}" \
     --test_txt "${TEST_FILE}" \
     -o "${TMP_SPLIT_DIR}"

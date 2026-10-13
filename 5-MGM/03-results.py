@@ -18,7 +18,7 @@ Description:
 
 Inputs (Default):
     -s / --scores : output/y_score.csv (MGM raw output)
-    -l / --labels : input/labels.csv (True metadata)
+    -l / --labels : ../data/input/labels.csv (True metadata)
     
 Outputs (Default):
     -o / --outdir : output/figures/ (Saves .png files)

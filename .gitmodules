@@ -1,0 +1,3 @@
+[submodule "2-DeepMicro/DeepMicro"]
+	path = 2-DeepMicro/DeepMicro
+	url = https://github.com/minoh0201/DeepMicro

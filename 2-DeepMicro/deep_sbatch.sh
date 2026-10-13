@@ -22,6 +22,7 @@ TRAIN_FILE=$1
 TEST_FILE=$2
 RUN_NAME=$3
 MODE=$4  # "loco" or "random"
+INPUT_DIR="${PIPELINE_INPUT_DIR:-../data/input}"
 
 echo "[1/3] Job initialized for ${RUN_NAME} (${MODE^^}) at: $(date)"
 echo "      Running on node: $SLURMD_NODENAME"
@@ -31,7 +32,7 @@ FINAL_DEST="../output/${MODE}/results/${RUN_NAME}/deepmicro"
 mkdir -p "${FINAL_DEST}"
 
 # Initialize environment
-source ~/.bashrc
+source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate mikropml
 
 echo "[2/3] Executing Mikropml Classifier on global DeepMicro embeddings..."
@@ -39,10 +40,10 @@ echo "[2/3] Executing Mikropml Classifier on global DeepMicro embeddings..."
 # Pass the pre-computed global embeddings directly into the R classification script
 $CONDA_PREFIX/bin/Rscript deep_mikropml.R \
     --mode "${MODE}" \
-    --embeddings "../data/models/AE[20]_global_input_otu_rep.csv" \
+    --embeddings "./DeepMicro/results/AE[20]_global_input_otu_rep.csv" \
     --train_file "${TRAIN_FILE}" \
     --test_file "${TEST_FILE}" \
-    --labels "../data/input/labels.csv" \
+    --labels "${INPUT_DIR}/labels.csv" \
     --output_dir "${FINAL_DEST}"
 
 echo "[3/3] Pipeline complete."

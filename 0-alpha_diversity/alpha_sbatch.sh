@@ -17,13 +17,14 @@ TRAIN_FILE=$1
 TEST_FILE=$2
 RUN_NAME=$3
 MODE=$4  # "loco" or "random"
+INPUT_DIR="${PIPELINE_INPUT_DIR:-../data/input}"
 
 mkdir -p slurm_logs
 
 echo "Initiating Alpha Diversity Baseline | Mode: ${MODE^^} | Run: ${RUN_NAME}"
 
 # 1. Initialize Conda environment
-source ~/.bashrc
+source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate mikropml
 
 # 2. Define structured output directories exactly matching the master architecture
@@ -36,8 +37,8 @@ $CONDA_PREFIX/bin/Rscript lopo_execution_alpha.R \
   --mode "${MODE}" \
   --train_file "${TRAIN_FILE}" \
   --test_file "${TEST_FILE}" \
-  --otu "../data/input/raw_global_otu_dedup.tsv" \
-  --labels "../data/input/labels.csv" \
+  --otu "${INPUT_DIR}/raw_global_otu_dedup.tsv" \
+  --labels "${INPUT_DIR}/labels.csv" \
   --output_dir "${R_OUT_DIR}"
 
 echo "=== Job Finished at $(date) ==="

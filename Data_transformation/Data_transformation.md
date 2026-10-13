@@ -72,4 +72,4 @@ The FASTA extraction step does not reconstruct sequences for `NOVEL:` or `SILVAT
 
 ## Reference files
 
-`1-single_study.py` uses the Greengenes2 QIIME 2 artifacts and SILVA FASTA under `../data/references/`. `2-merge.py` defaults to the corresponding root `data/` paths. The SILVA taxonomy TSV path referenced by `1-single_study.py` must also be available if SILVA taxonomy import and taxonomy lookup are required. In the current data bundle, the available file is named `translate_hash_silva.tsv`, while the script expects `silva_138.2_ssu_nr99_taxonomy.tsv`; this filename or path mismatch must be resolved for SILVA taxonomy lookup to work.
+`1-single_study.py` uses the Greengenes2 QIIME 2 artifacts under `../data/references/gg2_data/` and SILVA 138.2 files under `../data/references/silva_138/`. `2-merge.py` defaults to those root `data/` paths. The SILVA taxonomy TSV required for QIIME 2 taxonomy import is not present; `translate_hash_silva.tsv` is a different table and is not a replacement. SILVA reference matching still uses the FASTA file in `silva_138/`.

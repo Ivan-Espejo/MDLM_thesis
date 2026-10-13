@@ -9,8 +9,8 @@
 source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate vsearch_env
 
-QUERY_FASTA="${1:-../data/input/merged_seqs.fasta}"
-SILVA_FASTA="${2:-../data/references/silva132/SILVA_132_SSURef_NR99_DNA.fasta}"
+QUERY_FASTA="${1:-./output/preprocessing/MGM_Global/mgm_input.fasta}"
+SILVA_FASTA="${2:-../data/references/silva_132/SILVA_132_SSURef_NR99_DNA.fasta}"
 
 OUT_DIR="output/preprocessing/tmp"
 RAW_HITS="$OUT_DIR/vsearch_hits.tsv"

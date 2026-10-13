@@ -280,7 +280,8 @@ def generate_global_stability_plots(benchmark_root_dir, global_out_dir, mode):
                                  loc='upper left', bbox_to_anchor=(0.02, 0.74),
                                  ncol=1, frameon=True, fontsize=11, title_fontsize=13, facecolor='white', framealpha=0.9)
         
-        plt.title(f'Cross-Cohort Stability Distribution ({mode.upper()}): {metric.replace("_", " ")}', fontsize=17, fontweight='bold', pad=20)
+        mode_label = 'Grouped Cross-Cohort' if mode.lower() == 'loco' else mode.capitalize()
+        plt.title(f'Stability Distribution ({mode_label}): {metric.replace("_", " ")}', fontsize=17, fontweight='bold', pad=20)        
         plt.xlabel(x_label_str, fontsize=14, fontweight='bold')
         plt.ylabel('', fontsize=14)
         plt.grid(True, axis='x', linestyle='--', alpha=0.7)

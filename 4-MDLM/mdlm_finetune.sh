@@ -19,6 +19,8 @@ TRAIN_FILE=$1
 TEST_FILE=$2
 RUN_NAME=$3
 MODE=$4  # "loco" or "random"
+INPUT_DIR="${PIPELINE_INPUT_DIR:-../data/input}"
+MODEL_OUT_DIR="./output_${MODE}_${RUN_NAME}/finetuned_model"
 
 echo "=== MDLM Classifier Job Started | Mode: ${MODE^^} | Run: ${RUN_NAME} ==="
 echo "Allocated Node: $SLURM_NODELIST"
@@ -29,14 +31,14 @@ FINAL_DEST="../output/${MODE}/results/${RUN_NAME}/mdlm/predictions"
 LOGS_DIR="../output/${MODE}/results/${RUN_NAME}/mdlm/logs"
 
 
-mkdir -p ${TMP_SPLIT_DIR} ${MODEL_OUT_DIR} ${LOGS_DIR} ${FINAL_DEST}
+mkdir -p "${TMP_SPLIT_DIR}" "${MODEL_OUT_DIR}" "${LOGS_DIR}" "${FINAL_DEST}"
 touch ${LOGS_DIR}/finetune_metrics.txt
 
 #################################
 #### DATA SPLITTING ####
 #################################
 
-source ~/.bashrc
+source /opt/mambaforge/etc/profile.d/conda.sh
 conda activate mdlm_gpu
 
 echo "Step 1: Slicing Global .npy arrays based on ${MODE^^} definition..."
@@ -46,7 +48,7 @@ python 3.5-splitter.py \
     --mode "${MODE}" \
     -i ../output/preprocessing/MDLM_Global/512_embed_otu.npy \
     -l ../output/preprocessing/MDLM_Global/label.npy \
-    --labels_csv ../data/input/labels.csv \
+    --labels_csv "${INPUT_DIR}/labels.csv" \
     --train_txt "${TRAIN_FILE}" \
     --test_txt "${TEST_FILE}" \
     -o "${TMP_SPLIT_DIR}"
@@ -63,7 +65,7 @@ cd microbiome_transformers/finetune_discriminator/
 python begin.py \
     --samples ../../${TMP_SPLIT_DIR}/finetune_samples.npy \
     --sample_labels ../../${TMP_SPLIT_DIR}/finetune_labels.npy \
-    --vocab_path ../../data/references/GloVe_data/vocab_embeddings.npy \
+    --vocab_path ../../../data/references/GloVe_data/vocab_embeddings.npy \
     --output_path ../../${MODEL_OUT_DIR} \
     --log_file ../../${LOGS_DIR}/finetune_metrics \
     --batch_size 16 \
@@ -79,7 +81,8 @@ python begin.py \
     --adam_weight_decay 0.01 \
     --lr 0.0001 \
     --cuda \
-    --load_disc ../../data/models/MDLM_Models/ensemble/run10_epoch0_disc/pytorch_model.bin
+    --load_disc ../../../data/models/MDLM_Models/ensemble/run10_epoch0_disc/pytorch_model.bin
+
     
 cd ../../
 
@@ -98,7 +101,7 @@ python -u 4-Attribution_calculations.py \
     --data_path "${TMP_SPLIT_DIR}/test_samples.npy" \
     --label_path "${TMP_SPLIT_DIR}/test_labels.npy" \
     --sample_names_path "${TMP_SPLIT_DIR}/test_sample_names.txt" \
-    --vocab_path ./data/references/GloVe_data/vocab_embeddings.npy \
+    --vocab_path ../data/references/GloVe_data/vocab_embeddings.npy \
     --models_path "${MODEL_OUT_DIR}" \
     --output_dir "${TMP_SPLIT_DIR}"
 

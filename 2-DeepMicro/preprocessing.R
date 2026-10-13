@@ -10,7 +10,7 @@ options(width = as.numeric(system("tput cols", intern = TRUE)))
 option_list <- list(
   make_option(c("--input_otu"), type = "character", default = "../data/input/raw_global_otu_dedup.tsv",
               help = "Path to the Global OTU table (TSV format)"),
-  make_option(c("-o", "--output"), type = "character", default = "../data/models/global_input_otu.csv",
+  make_option(c("-o", "--output"), type = "character", default = "DeepMicro/data/global_input_otu.csv",
               help = "Path for the output DeepMicro CSV")
 )
 opt <- parse_args(OptionParser(option_list = option_list))

@@ -20,8 +20,8 @@ Workflow:
 
 Usage Example:
     python Attribution_calculations.py \
-        --data_path ../output/preprocessing/MDLM_Global/512_embed_otu.npy \
-        --label_path ../output/preprocessing/MDLM_Global/label.npy \
+        --data_path output/preprocessing/512_embed_otu.npy \
+        --label_path output/preprocessing/label.npy \
         --output_dir custom_results/
 =============================================================================
 """
