@@ -49,7 +49,8 @@ print_intro() {
     echo '    / /|_/ // /_/ // /__ / /|_/ / |_-<      / / / -_ |_-< / __/ |_-<      '
     echo '   /_/  /_//_____//____//_/  /_/____/      /_/  \__/____/ \__/____/       '
     echo '                                                                          '
-    echo '                    Microbiome ML Master Pipeline                         '
+    echo '          Cross-cohort prediction of inflammatory bowel disease           '
+    echo '                        using microbiome embeddings                       '
     echo '============================================================================='
 }
 
