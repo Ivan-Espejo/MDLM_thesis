@@ -175,19 +175,15 @@ results_glmnet <- execute_mikropml("glmnet")
 print("Training Radial SVM...")
 results_svm <- execute_mikropml("svmRadial")
 
+# --- Random Forest ---
+print("Training Random Forest...")
+results_rf <- execute_mikropml("rf")
+
 model_results <- list(
   GLMNET = results_glmnet,
-  SVM = results_svm
+  SVM = results_svm,
+  RF = results_rf
 )
-
-# --- Random Forest ---
-if (n_train_samples > 100) {
-  print("Training sample size > 100 detected. Training Random Forest...")
-  results_rf <- execute_mikropml("rf")
-  model_results$rf <- results_rf
-} else {
-  print("Training sample size <= 100. Skipping Random Forest.")
-}
 
 
 ################################################# 

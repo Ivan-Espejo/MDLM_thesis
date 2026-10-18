@@ -92,8 +92,7 @@ combined_labels <- bind_rows(train_labels, test_labels)
 cat("Calculating Global Alpha Diversity metrics...\n")
 
 # 1. Format OTU
-colnames(otu_raw)[1] <- "Taxon"
-num_matrix <- otu_raw %>% select(-Taxon)
+num_matrix <- otu_raw %>% select(-1, -any_of(c("Taxon", "taxonomy", "Confidence")))
 transposed_matrix <- as.data.frame(t(num_matrix))
 
 # 2. Normalize to Relative Abundances (TSS)
